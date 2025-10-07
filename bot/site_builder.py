@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 from datetime import datetime, timezone, timedelta
+from string import Template
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -12,7 +13,7 @@ SITE.mkdir(exist_ok=True)
 ARCH.mkdir(parents=True, exist_ok=True)
 
 ITEMS = json.loads((DATA / "items.json").read_text(encoding="utf-8")) if (DATA/"items.json").exists() else {"items":[]}
-DIGEST = json.loads((DATA / "digest.json").read_text(encoding="utf-8")) if (DATA/"digest.json").exists() else {"summary":""}
+DIGEST = json.loads((DATA / "digest.json").read_text(encoding="utf-8")) if (DATA/"digest.json").exists() else {"summary":"", "alerts":[]}
 
 now = datetime.now(timezone.utc)
 
@@ -79,13 +80,14 @@ def render_alerts(alerts: list[dict]) -> str:
 def build_index():
     items = ITEMS.get("items", [])
     buckets = group_by_period(items)
-    summary = html_escape(DIGEST.get("summary",""))
-    alerts = DIGEST.get("alerts", [])
+    summary_text = html_escape(DIGEST.get("summary",""))
+    alerts_html = render_alerts(DIGEST.get("alerts", []))
 
     hero_title = "Plan boldly. Retire confidently."  # requested hero
     venmo_footer = "Venmo donations are welcome! @MikeHnastchenko"
 
-    html = f"""<!doctype html>
+    # Use Template to avoid f-string brace issues
+    tmpl = Template("""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -96,7 +98,7 @@ def build_index():
 <body>
 <header class="site-header">
   <h1>Senior News Daily</h1>
-  <p class="tagline">{hero_title}</p>
+  <p class="tagline">$hero</p>
   <p class="muted">Daily AI-generated summary on U.S. senior news.</p>
 </header>
 
@@ -110,33 +112,33 @@ def build_index():
 
 <section class="summary">
   <h2>Daily Summary</h2>
-  <pre>{summary}</pre>
+  <pre>$summary</pre>
 </section>
 
 <section class="scams">
   <h2>Scam Alerts</h2>
   <p class="muted">Recent reports affecting older adults. Always verify requests for money, benefits, or personal info.</p>
-  {render_alerts(alerts)}
+  $alerts
 </section>
 
 <section id="list" class="grid" data-active="today">
   <div data-period="today" class="panel show">
-    {render_cards(buckets['today'])}
+    $today_cards
   </div>
   <div data-period="week" class="panel">
-    {render_cards(buckets['week'])}
+    $week_cards
   </div>
   <div data-period="month" class="panel">
-    {render_cards(buckets['month'])}
+    $month_cards
   </div>
   <div data-period="year" class="panel">
-    {render_cards(buckets['year'])}
+    $year_cards
   </div>
 </section>
 
 <footer class="site-footer">
-  <div>Updated {now.strftime('%Y-%m-%d %H:%M UTC')}</div>
-  <div class="muted">{venmo_footer}</div>
+  <div>Updated $updated</div>
+  <div class="muted">$venmo</div>
 </footer>
 
 <script>
@@ -147,12 +149,26 @@ chips.forEach(ch => ch.addEventListener('click', () => {
   ch.classList.add('active');
   const f = ch.getAttribute('data-filter');
   panels.forEach(p => p.classList.remove('show'));
-  document.querySelector(`.panel[data-period="${'{'}f{'}'}"]`).classList.add('show');
+  // Avoid backtick ${} template; use string concat to keep Python happy
+  const sel = ".panel[data-period='" + f + "']";
+  document.querySelector(sel).classList.add('show');
 }));
 </script>
 </body>
 </html>
-"""
+""")
+
+    html = tmpl.substitute(
+        hero=hero_title,
+        summary=summary_text,
+        alerts=alerts_html,
+        today_cards=render_cards(buckets["today"]),
+        week_cards=render_cards(buckets["week"]),
+        month_cards=render_cards(buckets["month"]),
+        year_cards=render_cards(buckets["year"]),
+        updated=now.strftime("%Y-%m-%d %H:%M UTC"),
+        venmo=venmo_footer,
+    )
     (SITE / "index.html").write_text(html, encoding="utf-8")
 
 def build_archive():
@@ -162,6 +178,7 @@ def build_archive():
         d = fmt_date(it.get("published") or it.get("fetched"))
         by_day.setdefault(d, []).append(it)
 
+    # Archive index
     links = []
     for day in sorted(by_day.keys(), reverse=True):
         links.append(f"<li><a href='{day}.html'>{day}</a> <span class='muted'>({len(by_day[day])})</span></li>")
@@ -169,6 +186,7 @@ def build_archive():
         "<!doctype html><meta charset='utf-8'><link rel=stylesheet href='../styles.css'>"
         + "<h1>Archive</h1><ul>" + "\n".join(links) + "</ul>", encoding="utf-8")
 
+    # Daily pages
     for day, its in by_day.items():
         (ARCH / f"{day}.html").write_text(
             "<!doctype html><meta charset='utf-8'><link rel=stylesheet href='../styles.css'>"
