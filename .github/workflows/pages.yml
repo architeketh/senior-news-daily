@@ -2,7 +2,8 @@ name: Build & Publish — Senior News Daily
 
 on:
   schedule:
-    - cron: "0 12 * * *"
+    # ⏰ Runs every 12 hours (00:00 UTC and 12:00 UTC)
+    - cron: "0 */12 * * *"
   workflow_dispatch:
     inputs:
       extra_url:
@@ -32,9 +33,13 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -53,16 +58,17 @@ jobs:
           FILTER_MODE: ${{ github.event.inputs.filter_mode }}
         run: python bot/fetch.py
 
-      - name: Summarize
+      - name: Summarize daily articles
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: gpt-4o-mini
         run: python bot/summarize.py
 
-      - name: Build site
+      - name: Build website
         run: python bot/site_builder.py
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
@@ -70,5 +76,5 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - id: deployment
+      - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
