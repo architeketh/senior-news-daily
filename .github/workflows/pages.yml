@@ -4,6 +4,19 @@ on:
   schedule:
     - cron: "0 12 * * *"      # daily at 12:00 UTC (07:00 America/Chicago during DST)
   workflow_dispatch:
+    inputs:
+      extra_url:
+        description: "Optional: fetch from this URL now (RSS or article)"
+        required: false
+        default: ""
+      broaden_sites:
+        description: "Include lifestyle (golf, travel, cooking, finance) feeds"
+        required: false
+        default: "true"
+      filter_mode:
+        description: "Filter mode: none | loose | strict"
+        required: false
+        default: "none"
   push:
     branches: [ main ]
 
@@ -24,18 +37,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: |
+
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
       - name: Fetch feeds
+        env:
+          EXTRA_URL: ${{ github.event.inputs.extra_url }}
+          BROADEN_SITES: ${{ github.event.inputs.broaden_sites }}
+          FILTER_MODE: ${{ github.event.inputs.filter_mode }}
         run: python bot/fetch.py
+
       - name: Summarize
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: gpt-4o-mini
         run: python bot/summarize.py
+
       - name: Build site
         run: python bot/site_builder.py
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
