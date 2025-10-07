@@ -1,21 +1,70 @@
-:root { --bg:#ffffff; --fg:#111; --muted:#6b7280; --chip:#f3f4f6; --primary:#111; }
+:root {
+  --bg:#ffffff; --fg:#111; --muted:#6b7280; --chip:#f3f4f6; --primary:#111;
+  --border:#e5e7eb; --shadow: 0 8px 24px rgba(0,0,0,.08);
+}
 * { box-sizing: border-box; }
-body { margin:0; font: 16px/1.5 system-ui,Segoe UI,Roboto,Arial; color:var(--fg); background:var(--bg); }
-.site-header { padding: 28px 20px 14px; border-bottom: 1px solid #e5e7eb; text-align:center; }
-.site-header h1 { margin:0 0 6px 0; font-size: 30px; }
-.tagline { margin: 4px 0 6px; font-weight:600; font-size:18px; }
+body { margin:0; font: 16px/1.55 system-ui,Segoe UI,Roboto,Arial; color:var(--fg); background:var(--bg); }
+
+/* Hero like Retail Trends */
+.site-header.hero {
+  padding: 48px 16px 28px;
+  text-align:center;
+  border-bottom:1px solid var(--border);
+  background: radial-gradient(1200px 400px at 50% -50%, #fafafa, #ffffff 60%);
+}
+.hero-title {
+  font-size: clamp(28px, 5vw, 52px);
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
 .muted { color: var(--muted); }
-.chips { display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px; border-bottom:1px solid #e5e7eb; justify-content:center; }
-.chip { display:inline-block; padding:8px 12px; border-radius:999px; background:var(--chip); cursor:pointer; border:1px solid #e5e7eb; text-decoration:none; color:inherit; }
+.retrieved { margin-top: 6px; font-size: 14px; color: var(--muted); }
+
+/* Chips */
+.chips {
+  display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px;
+  border-bottom:1px solid var(--border); justify-content:center; position:sticky; top:0; background:#fff; z-index:10;
+}
+.chip {
+  display:inline-block; padding:8px 12px; border-radius:999px; background:var(--chip);
+  cursor:pointer; border:1px solid var(--border); text-decoration:none; color:inherit; font-weight:600;
+}
 .chip.active { background:#111; color:#fff; }
-.summary, .scams { padding: 16px; max-width: 1000px; margin: 0 auto; }
-.summary pre { white-space: pre-wrap; font: inherit; background:#f9fafb; padding:12px; border:1px solid #e5e7eb; border-radius:8px; }
-.scams .alerts { margin: 8px 0 0; }
+
+/* Summary + counts */
+.summary, .scams { padding: 18px; max-width: 1100px; margin: 0 auto; }
+.summary pre {
+  white-space: pre-wrap; font: inherit; background:#f9fafb; padding:12px;
+  border:1px solid var(--border); border-radius:10px;
+}
+.counts { margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; }
+.count-chip { background:#f1f5f9; border:1px solid var(--border); padding:6px 10px; border-radius:999px; }
+
+/* Cards grid */
 .grid { padding: 16px; max-width: 1200px; margin: 0 auto; }
 .panel { display:none; }
-.panel.show { display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:12px; }
-.card { display:block; padding:14px; border:1px solid #e5e7eb; border-radius:12px; text-decoration:none; color:inherit; background:#fff; }
-.card:hover { box-shadow: 0 4px 18px rgba(0,0,0,0.06); }
-.card-title { font-weight:600; margin-bottom:6px; }
+.panel.show { display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:14px; }
+
+.card {
+  position:relative; display:block; border:1px solid var(--border);
+  border-radius:14px; background:#fff; box-shadow: var(--shadow); overflow:hidden;
+}
+.card-block { display:block; text-decoration:none; color:inherit; padding:16px 14px 42px; }
+.card-title { font-weight:700; margin-bottom:6px; font-size: 17px; }
 .card-meta { color: var(--muted); font-size: 13px; }
-.site-footer { padding: 24px; color: var(--muted); border-top:1px solid #e5e7eb; text-align:center; }
+.badge { background:#eef2ff; border:1px solid #e0e7ff; padding:2px 6px; border-radius:999px; }
+
+/* Save button */
+.save {
+  position:absolute; right:8px; bottom:8px; border:1px solid var(--border);
+  background:#fff; border-radius:10px; padding:6px 10px; cursor:pointer;
+  font-size:16px;
+}
+.save:hover { background:#fafafa; }
+
+/* Footer */
+.site-footer {
+  padding: 24px; color: var(--muted); border-top:1px solid var(--border); text-align:center; margin-top: 12px;
+}
