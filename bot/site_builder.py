@@ -1,7 +1,13 @@
 # bot/site_builder.py
 """
-Senior News Daily — Site Builder (safe version)
-Restores formatting, color palette, hero, category filters, and JS — no f-string syntax errors.
+Senior News Daily — Site Builder
+- Hero banner
+- Category chips (color-matched to categories)
+- Saved chip (shows only starred items)
+- Category-colored article cards + badges
+- Scam alerts
+- Archive pages (site/archive/YYYY-MM-DD.html) + linked list
+- Auto-generates styles.css so formatting can't go missing
 """
 
 import json, datetime, pathlib, re
@@ -10,7 +16,9 @@ from collections import Counter, defaultdict
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 SITE = ROOT / "site"
+ARCH = SITE / "archive"
 SITE.mkdir(parents=True, exist_ok=True)
+ARCH.mkdir(parents=True, exist_ok=True)
 
 ITEMS_PATH = DATA / "items.json"
 DIGEST_PATH = DATA / "digest.json"
@@ -26,18 +34,25 @@ def fmt_date(dt_iso: str | None) -> str:
         dt = datetime.datetime.fromisoformat(dt_iso.replace("Z", "+00:00"))
         return dt.strftime("%b %d, %Y")
     except Exception:
-        return dt_iso[:10]
+        return (dt_iso or "")[:10]
+
+def day_key(it: dict) -> str:
+    return (it.get("published") or it.get("fetched") or "")[:10]
 
 def slugify(s: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", (s or "general").lower()).strip("-")
+    return re.sub(r"[^a-z0-9]+", "-", (s or "general").lower()).strip("-") or "general"
 
 # ----------------------- CSS ---------------------------
 CSS = r"""
 *{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#f9fafb;color:#111827;margin:0}
 .container{width:min(1100px,90%);margin:0 auto;padding:1rem 0 3rem}h1,h2,h3{margin:0 0 .5rem}
+a{color:inherit}
 .muted{color:#6b7280;font-size:.9em}
 .hero{text-align:center;background:linear-gradient(135deg,#111827,#1e3a8a);color:#fff;padding:3rem 1rem 2rem}
 .hero h1{font-size:2.3rem;margin-bottom:.3rem}.hero .subtitle{color:#cbd5e1;font-size:1.1rem}
+.topnav{background:#1118270d;border-bottom:1px solid #e5e7eb}
+.topnav .container{display:flex;gap:1rem;align-items:center;justify-content:space-between;padding:0.6rem 0;}
+.topnav a{font-weight:700;text-decoration:none}
 section{margin-top:2rem}
 .articles #cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem}
 .card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 2px 5px rgba(0,0,0,.04);
@@ -49,11 +64,13 @@ padding:1rem 1.25rem;position:relative;transition:.2s}
 .save{position:absolute;top:8px;right:10px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#9ca3af}
 .save:hover{color:#111827}
 .filterbar{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0 1rem}
-.chip{border:1px solid #d1d5db;border-radius:9999px;padding:.4rem .9rem;cursor:pointer;font-weight:600;background:#f3f4f6;color:#111}
-.chip b{font-weight:700}.chip.active{background:#111;color:#fff}
+.chip{border:1px solid #d1d5db;border-radius:9999px;padding:.4rem .9rem;cursor:pointer;font-weight:700;background:#f3f4f6;color:#111}
+.chip b{font-weight:800}.chip.active{outline:2px solid #111; color:#111; background:#fff}
 .alerts li,.archives li{margin:.4rem 0}
 .footer{text-align:center;background:#111827;color:#cbd5e1;padding:2rem 1rem}
 .footer a,.footer strong{color:#facc15}
+
+/* Category palette (cards, badges, and chips share colors) */
 :root{
 --cat-medicare:#2563eb;--cat-social-security:#059669;--cat-finance-retirement:#0ea5e9;
 --cat-golf-leisure:#f59e0b;--cat-travel:#ef4444;--cat-cooking-nutrition:#e11d48;
@@ -70,7 +87,7 @@ padding:1rem 1.25rem;position:relative;transition:.2s}
 .card.cat-safety-scams::before{background:var(--cat-safety-scams)}
 .card.cat-policy-legislation::before{background:var(--cat-policy-legislation)}
 .card.cat-general::before{background:var(--cat-general)}
-.badge{display:inline-block;border:1px solid transparent;border-radius:4px;padding:0 .4em;font-size:.75rem;font-weight:600}
+.badge{display:inline-block;border:1px solid transparent;border-radius:4px;padding:0 .4em;font-size:.75rem;font-weight:700}
 .badge.cat-medicare{background:#dbeafe;border-color:var(--cat-medicare)}
 .badge.cat-social-security{background:#d1fae5;border-color:var(--cat-social-security)}
 .badge.cat-finance-retirement{background:#cffafe;border-color:var(--cat-finance-retirement)}
@@ -82,6 +99,19 @@ padding:1rem 1.25rem;position:relative;transition:.2s}
 .badge.cat-safety-scams{background:#fee2e2;border-color:var(--cat-safety-scams)}
 .badge.cat-policy-legislation{background:#e5e7eb;border-color:var(--cat-policy-legislation)}
 .badge.cat-general{background:#f3f4f6;border-color:var(--cat-general)}
+/* Color chips to match categories */
+.chip[data-cat="medicare"]{background:#dbeafe;border-color:var(--cat-medicare)}
+.chip[data-cat="social-security"]{background:#d1fae5;border-color:var(--cat-social-security)}
+.chip[data-cat="finance-retirement"]{background:#cffafe;border-color:var(--cat-finance-retirement)}
+.chip[data-cat="golf-leisure"]{background:#fef3c7;border-color:var(--cat-golf-leisure)}
+.chip[data-cat="travel"]{background:#fee2e2;border-color:var(--cat-travel)}
+.chip[data-cat="cooking-nutrition"]{background:#ffe4e6;border-color:var(--cat-cooking-nutrition)}
+.chip[data-cat="caregiving-ltc"]{background:#ede9fe;border-color:var(--cat-caregiving-ltc)}
+.chip[data-cat="aging-research"]{background:#cffafe;border-color:var(--cat-aging-research)}
+.chip[data-cat="safety-scams"]{background:#fee2e2;border-color:var(--cat-safety-scams)}
+.chip[data-cat="policy-legislation"]{background:#e5e7eb;border-color:var(--cat-policy-legislation)}
+.chip[data-cat="general"]{background:#f3f4f6;border-color:var(--cat-general)}
+.chip[data-cat="__saved"]{background:#e0f2fe;border-color:#0284c7}
 """
 (SITE / "styles.css").write_text(CSS, encoding="utf-8")
 
@@ -106,7 +136,7 @@ def render_card(it):
         "<div class='card-title'>{title}</div>"
         "<div class='card-meta'>{source} · {date} · <span class='badge cat-{slug}'>{cat}</span></div>"
         "<div class='card-summary'>{summary}</div></a>"
-        "<button class='save' data-id='{id}'>&#9734;</button></div>"
+        "<button class='save' data-id='{id}' title='Save' aria-label='Save'>&#9734;</button></div>"
     ).format(
         slug=esc(cat_slug),
         id=esc(it.get("id", "")),
@@ -118,33 +148,56 @@ def render_card(it):
         summary=esc((it.get("summary") or "")[:250]),
     )
 
-def render_cards(arr): return "\n".join(render_card(it) for it in arr)
+def render_cards(arr): 
+    return "\n".join(render_card(it) for it in arr)
 
 def render_alerts(alerts):
     if not alerts: return "<p>No current scam alerts.</p>"
     out = ["<ul class='alerts'>"]
     for a in alerts:
         out.append("<li><a href='{0}' target='_blank'>{1}</a> <small>{2}</small></li>".format(
-            esc(a.get("link","")), esc(a.get("title","")), fmt_date(a.get("published"))
+            esc(a.get("link","")), esc(a.get("title","")), fmt_date(a.get("published") or a.get("fetched"))
         ))
     out.append("</ul>")
     return "\n".join(out)
 
-def render_archive_links(items):
-    days = defaultdict(int)
+def build_archive_pages(items):
+    """Write site/archive/YYYY-MM-DD.html and return a linked <ul> list."""
+    by_day = defaultdict(list)
     for it in items:
-        d = (it.get("published") or it.get("fetched") or "")[:10]
-        if d: days[d]+=1
+        d = day_key(it)
+        if d: by_day[d].append(it)
+
+    # write day pages
+    for d, its in by_day.items():
+        body = """
+        <!doctype html><meta charset="utf-8">
+        <link rel="stylesheet" href="../styles.css">
+        <div class="topnav"><div class="container">
+          <a href="../index.html">← Back to Home</a>
+          <div class="muted">Archive: {day}</div>
+        </div></div>
+        <main class="container">
+          <h1>Archive — {day}</h1>
+          <section class="articles"><div id="cards">{cards}</div></section>
+        </main>
+        <footer class="footer"><p>Venmo donations: <strong>@MikeHnastchenko</strong></p></footer>
+        """.format(day=esc(d), cards=render_cards(its))
+        (ARCH / f"{d}.html").write_text(body, encoding="utf-8")
+
+    # return list with links
     out = ["<ul class='archives'>"]
-    for d,n in sorted(days.items(), reverse=True):
-        out.append("<li>{0} <span class='muted'>({1} articles)</span></li>".format(esc(d), n))
+    for d in sorted(by_day.keys(), reverse=True):
+        count = len(by_day[d])
+        out.append("<li><a href='archive/{d}.html'>{d}</a> <span class='muted'>({n} articles)</span></li>".format(d=esc(d), n=count))
     out.append("</ul>")
     return "\n".join(out)
 
-# Category chips
+# Build category chips (+ Saved chip)
 cat_counts = Counter(it["category"] for it in items)
 chips = ["<button class='chip active' data-cat='__all'>All <b>{}</b></button>".format(sum(cat_counts.values()))]
-for cat,n in sorted(cat_counts.items(), key=lambda kv:(-kv[1], kv[0].lower())):
+chips.append("<button class='chip' data-cat='__saved'>Saved <b>★</b></button>")
+for cat, n in sorted(cat_counts.items(), key=lambda kv:(-kv[1], kv[0].lower())):
     chips.append("<button class='chip' data-cat='{slug}'>{cat} <b>{n}</b></button>".format(
         slug=esc(slugify(cat)), cat=esc(cat), n=n))
 chips_html = "\n".join(chips)
@@ -162,6 +215,10 @@ template = """<!doctype html>
   <h1>Plan boldly. Retire confidently.</h1>
   <p class="subtitle">AI-powered daily insights for seniors — health, finance, leisure & scams.</p>
 </header>
+<div class="topnav"><div class="container">
+  <a href="index.html">Home</a>
+  <a href="archive/">Archive</a>
+</div></div>
 <main class="container">
   <section class="summary">
     <h2>Daily Summary</h2>
@@ -180,31 +237,75 @@ template = """<!doctype html>
   <p class="muted">© {year} Senior News Daily — All Rights Reserved</p>
 </footer>
 <script>
+// category filtering + saved view
 const cards=[...document.querySelectorAll('#cards .card')];
 const chips=[...document.querySelectorAll('.chip')];
-function applyFilter(slug){{cards.forEach(c=>c.style.display=(slug==='__all'||c.dataset.cat===slug)?'':'none');
-chips.forEach(ch=>ch.classList.toggle('active',ch.dataset.cat===slug));}}
-chips.forEach(ch=>ch.addEventListener('click',()=>{{const s=ch.dataset.cat;localStorage.setItem('snd_cat',s);applyFilter(s);}}));
-applyFilter(localStorage.getItem('snd_cat')||'__all');
-function getSaved(){{try{{return JSON.parse(localStorage.getItem('snd_saved')||'[]');}}catch(e){{return[]}}}}
-function setSaved(v){{localStorage.setItem('snd_saved',JSON.stringify([...new Set(v)]));}}
-function updateStars(){{const cur=new Set(getSaved());document.querySelectorAll('.save').forEach(b=>{{b.innerHTML=cur.has(b.dataset.id)?'★':'☆';}});}}
-document.addEventListener('click',e=>{{if(e.target.classList.contains('save')){{const id=e.target.dataset.id;
-let cur=new Set(getSaved());cur.has(id)?cur.delete(id):cur.add(id);setSaved([...cur]);updateStars();}}}});
+
+function getSaved(){try{return JSON.parse(localStorage.getItem('snd_saved')||'[]');}catch(e){return[]}}
+function setSaved(v){localStorage.setItem('snd_saved',JSON.stringify([...new Set(v)]));}
+function updateStars(){
+  const cur=new Set(getSaved());
+  document.querySelectorAll('.save').forEach(b=>{b.innerHTML=cur.has(b.dataset.id)?'★':'☆';});
+}
+
+function applyFilter(slug){
+  if(slug==='__saved'){
+    const cur=new Set(getSaved());
+    cards.forEach(c=>{c.style.display=cur.has(c.dataset.id)?'':'none';});
+  }else{
+    cards.forEach(c=>{c.style.display=(slug==='__all'||c.dataset.cat===slug)?'':'none';});
+  }
+  chips.forEach(ch=>ch.classList.toggle('active',ch.dataset.cat===slug));
+  localStorage.setItem('snd_cat',slug);
+}
+chips.forEach(ch=>ch.addEventListener('click',()=>applyFilter(ch.dataset.cat)));
+
+document.addEventListener('click',e=>{
+  if(e.target.classList.contains('save')){
+    const id=e.target.dataset.id;
+    const cur=new Set(getSaved());
+    cur.has(id)?cur.delete(id):cur.add(id);
+    setSaved([...cur]);
+    updateStars();
+  }
+});
+
 updateStars();
+applyFilter(localStorage.getItem('snd_cat')||'__all');
 </script>
 </body></html>
 """
 
-html = template.format(
+# -------------------- Build & Write ---------------------
+# 1) Build per-day archive pages and linked list
+archives_html = build_archive_pages(items)
+
+# 2) Compose homepage
+home_html = template.format(
     summary=esc(summary),
     updated=fmt_date(generated),
     chips=chips_html,
     cards=render_cards(items),
     alerts=render_alerts(alerts),
-    archives=render_archive_links(items),
+    archives=archives_html,
     year=datetime.date.today().year,
 )
 
-(SITE / "index.html").write_text(html, encoding="utf-8")
-print(f"[site_builder] Built site/index.html with {len(items)} articles and {len(cat_counts)} categories.")
+(SITE / "index.html").write_text(home_html, encoding="utf-8")
+
+# 3) Also write archive index page
+arch_index = """<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<div class="topnav"><div class="container">
+  <a href="../index.html">← Back to Home</a>
+  <div class="muted">Archive</div>
+</div></div>
+<main class="container">
+  <h1>Archive</h1>
+  {archives}
+</main>
+<footer class="footer"><p>Venmo donations: <strong>@MikeHnastchenko</strong></p></footer>
+""".format(archives=archives_html)
+(ARCH / "index.html").write_text(arch_index, encoding="utf-8")
+
+print(f"[site_builder] Built site/index.html + {len(list(ARCH.glob('*.html')))-1} archive day pages.")
