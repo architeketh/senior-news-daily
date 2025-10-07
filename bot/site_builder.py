@@ -1,18 +1,18 @@
 # bot/site_builder.py
 """
-Senior News Daily — Complete Site Builder
+Senior News Daily — Clean Site Builder
 Outputs:
+- site/styles.css  (auto-generated each build)
 - site/index.html
 - site/archive/YYYY-MM-DD.html (+ site/archive/index.html)
 - site/saved.html
-- site/styles.css  (auto-generated each build)
 
 Features:
 - Hero banner ("Plan boldly. Retire confidently.")
-- Category chips (color matches card/badge), Saved chip
+- Category chips (color matches card/badge) + "Saved" chip
 - Colored cards & badges by category
 - Scam Alerts section
-- Per-day archive pages with links
+- Per-day archive pages with correct links on both home & archive index
 - "Next update in Xh Ym · <UTC time>" badge
 """
 
@@ -50,10 +50,7 @@ def slugify(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (s or "general").lower()).strip("-") or "general"
 
 def next_update_badge(now: dt | None = None) -> str:
-    """
-    Workflow cron: every 12 hours (00:00 and 12:00 UTC).
-    Compute time until the next run and return a small badge string.
-    """
+    """Workflow: every 12 hours (00:00 & 12:00 UTC). Show time until next run."""
     now = now or dt.now(timezone.utc)
     base = now.replace(minute=0, second=0, microsecond=0)
     slots = [
@@ -163,31 +160,54 @@ def render_alerts(alerts):
     if not alerts: return "<p>No current scam alerts.</p>"
     out = ["<ul class='alerts'>"]
     for a in alerts:
-        out.append(f"<li><a href='{esc(a.get('link',''))}' target='_blank'>{esc(a.get('title',''))}</a> "
-                   f"<small>{fmt_date(a.get('published') or a.get('fetched'))}</small></li>")
+        out.append(
+            f"<li><a href='{esc(a.get('link',''))}' target='_blank'>{esc(a.get('title',''))}</a> "
+            f"<small>{fmt_date(a.get('published') or a.get('fetched'))}</small></li>"
+        )
     out.append("</ul>")
     return "\n".join(out)
 
 def build_archive_pages(items):
+    """
+    Write site/archive/YYYY-MM-DD.html and return two lists:
+    - home_list: links prefixed with 'archive/' for homepage
+    - index_list: links with no prefix for /archive/index.html
+    """
     by_day = defaultdict(list)
     for it in items:
         d = day_key(it)
-        if d: by_day[d].append(it)
-    # write pages
+        if d:
+            by_day[d].append(it)
+
+    # write day pages
     for d, its in by_day.items():
         body = f"""<!doctype html><meta charset='utf-8'>
 <link rel='stylesheet' href='../styles.css'>
-<div class='topnav'><div class='container'><a href='../index.html'>← Home</a><div class='muted'>Archive: {esc(d)}</div></div></div>
-<main class='container'><h1>Archive — {esc(d)}</h1><div id='cards'>{render_cards(its)}</div></main>
+<div class='topnav'><div class='container'>
+  <a href='../index.html'>← Home</a>
+  <a href='./'>Archive</a>
+</div></div>
+<main class='container'>
+  <h1>Archive — {esc(d)}</h1>
+  <div id='cards'>{render_cards(its)}</div>
+</main>
 <footer class='footer'><p>Venmo: <strong>@MikeHnastchenko</strong></p></footer>"""
         (ARCH / f"{d}.html").write_text(body, encoding="utf-8")
-    # linked list
-    out = ["<ul class='archives'>"]
-    for d in sorted(by_day.keys(), reverse=True):
-        n = len(by_day[d])
-        out.append(f"<li><a href='archive/{esc(d)}.html'>{esc(d)}</a> <span class='muted'>({n} articles)</span></li>")
-    out.append("</ul>")
-    return "\n".join(out)
+
+    def list_html(prefix: str) -> str:
+        out = ["<ul class='archives'>"]
+        for d in sorted(by_day.keys(), reverse=True):
+            n = len(by_day[d])
+            out.append(
+                f"<li><a href='{prefix}{esc(d)}.html'>{esc(d)}</a> "
+                f"<span class='muted'>({n} articles)</span></li>"
+            )
+        out.append("</ul>")
+        return "\n".join(out)
+
+    home_list = list_html("archive/")  # used on /
+    index_list = list_html("")         # used on /archive/
+    return home_list, index_list
 
 # Chips (+ Saved)
 cat_counts = Counter(it["category"] for it in items)
@@ -236,47 +256,35 @@ updateStars();applyFilter(localStorage.getItem('snd_cat')||'__all');
 </script></body></html>"""
 
 # -------------------- Build -----------------------------
-def build_archive_pages(items):
-    """Write site/archive/YYYY-MM-DD.html and return two lists:
-       - home_list: links prefixed with 'archive/' for homepage
-       - index_list: links with no prefix for /archive/index.html
-    """
-    by_day = defaultdict(list)
-    for it in items:
-        d = day_key(it)
-        if d:
-            by_day[d].append(it)
+archives_home_html, archives_index_html = build_archive_pages(items)
+badge_html = next_update_badge()
 
-    # write per-day pages
-    for d, its in by_day.items():
-        body = f"""<!doctype html><meta charset='utf-8'>
-<link rel='stylesheet' href='../styles.css'>
-<div class='topnav'><div class='container'>
-  <a href='../index.html'>← Home</a>
-  <a href='./'>Archive</a>
+home_html = (template
+    .replace("__SUMMARY__", esc(summary))
+    .replace("__UPDATED__", fmt_date(generated))
+    .replace("__BADGE__", badge_html)
+    .replace("__CHIPS__", chips_html)
+    .replace("__CARDS__", render_cards(items))
+    .replace("__ALERTS__", render_alerts(alerts))
+    .replace("__ARCHIVES__", archives_home_html)
+    .replace("__YEAR__", str(datetime.date.today().year))
+)
+(SITE / "index.html").write_text(home_html, encoding="utf-8")
+
+# Archive index page
+arch_index = """<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<div class="topnav"><div class="container">
+  <a href="../index.html">← Home</a>
+  <div class="muted">Archive</div>
 </div></div>
-<main class='container'>
-  <h1>Archive — {esc(d)}</h1>
-  <div id='cards'>{render_cards(its)}</div>
+<main class="container">
+  <h1>Archive</h1>
+  __ARCHIVES_INDEX__
 </main>
-<footer class='footer'><p>Venmo: <strong>@MikeHnastchenko</strong></p></footer>"""
-        (ARCH / f"{d}.html").write_text(body, encoding="utf-8")
-
-    def list_html(prefix: str) -> str:
-        out = ["<ul class='archives'>"]
-        for d in sorted(by_day.keys(), reverse=True):
-            n = len(by_day[d])
-            out.append(
-                f"<li><a href='{prefix}{esc(d)}.html'>{esc(d)}</a> "
-                f"<span class='muted'>({n} articles)</span></li>"
-            )
-        out.append("</ul>")
-        return "\n".join(out)
-
-    home_list = list_html("archive/")  # used on /
-    index_list = list_html("")         # used on /archive/
-    return home_list, index_list
-
+<footer class="footer"><p>Venmo: <strong>@MikeHnastchenko</strong></p></footer>
+""".replace("__ARCHIVES_INDEX__", archives_index_html)
+(ARCH / "index.html").write_text(arch_index, encoding="utf-8")
 
 # Saved Articles page (renders user's local saved set by reusing cards from index)
 saved_html = """<!doctype html><meta charset='utf-8'><title>Saved Articles — Senior News Daily</title>
