@@ -1,5 +1,5 @@
-# data/feeds.yaml
 feeds:
+  # Senior policy & health
   - https://press.aarp.org/rss
   - https://www.kff.org/topic/medicare/feed/
   - https://www.kff.org/topic/medicaid/feed/
@@ -11,8 +11,14 @@ feeds:
   - https://www.nia.nih.gov/news/rss.xml
   - https://tools.cdc.gov/api/v2/resources/media/403372.rss
   - https://www.consumerfinance.gov/about-us/blog/rss/
-  - https://www.fbi.gov/news/stories/feed
-  - https://www.justice.gov/elderjustice/rss.xml
   - https://www.ftc.gov/news-events/news/rss
+  - https://www.justice.gov/elderjustice/rss.xml
   - https://www.hhs.gov/about/news/rss.xml
+
+  # Lifestyle & leisure (new broadened sites)
+  - https://golf.com/feed/
+  - https://www.travelandleisure.com/rss
+  - https://www.epicurious.com/services/rss/feeds/latest.xml
+  - https://www.cnbc.com/id/10000354/device/rss/rss.html
+  - https://www.nerdwallet.com/blog/feed/
   - https://feeds.npr.org/1001/rss.xml
