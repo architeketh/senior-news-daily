@@ -2,7 +2,7 @@ name: Build & Publish — Senior News Daily
 
 on:
   schedule:
-    - cron: "0 12 * * *"      # daily at 12:00 UTC (07:00 America/Chicago during DST)
+    - cron: "0 12 * * *"
   workflow_dispatch:
     inputs:
       extra_url:
@@ -40,8 +40,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
+          pip install "lxml[html_clean]"
+          pip check
+          python -c "import readability, lxml.html.clean; print('✅ readability + lxml_html_clean OK')"
 
       - name: Fetch feeds
         env:
