@@ -1,0 +1,9 @@
+{
+  "Medicare": ["medicare", "cms", "part d", "drug", "rx", "prescription", "premium"],
+  "Social Security": ["social security", "ssa", "pension", "benefit", "ssi", "cola"],
+  "Aging Research": ["aging", "nia", "nih", "alzheim", "dementia", "longevity", "falls"],
+  "Caregiving & LTC": ["caregiver", "nursing home", "long-term care", "ltc"],
+  "Safety & Scams": ["scam", "fraud", "phishing", "robocall", "elder abuse", "identity theft"],
+  "Finance & Retirement": ["retirement", "retiree", "annuity", "401k", "savings", "inflation"],
+  "Policy & Legislation": ["policy", "bill", "law", "congress", "regulation", "rulemaking", "hhs", "acl"]
+}
