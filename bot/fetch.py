@@ -17,6 +17,9 @@ except Exception:
     print("\n[fetch] Missing PyYAML; using a tiny fallback parser for feeds.yaml (simple lists only).\n")
     yaml = None
 
+from langdetect import detect, DetectorFactory
+DetectorFactory.seed = 42  # deterministic language detection
+
 DEFAULT_FEEDS = [
     "https://press.aarp.org/rss",
     "https://www.kff.org/topic/medicare/feed/",
@@ -35,8 +38,6 @@ KEYWORDS = [
     "rx", "drug price", "prescription", "caregiver", "pension", "ssi", "cost-of-living", "cola",
 ]
 
-US_TZ = timezone.utc  # keep UTC internally, format later
-
 def _load_feeds() -> list[str]:
     if FEEDS.exists():
         if yaml:
@@ -50,6 +51,7 @@ def _load_feeds() -> list[str]:
     return DEFAULT_FEEDS
 
 def _hash(s: str) -> str:
+    import hashlib
     return hashlib.sha1(s.encode("utf-8")).hexdigest()[:16]
 
 def _norm_time(s):
@@ -67,6 +69,19 @@ def _match_us_senior(text: str) -> bool:
     text_low = (text or "").lower()
     return any(k in text_low for k in KEYWORDS)
 
+def _is_spanish_or_not_english(text: str) -> bool:
+    txt = (text or "").strip()
+    if not txt:
+        return False
+    try:
+        lang = detect(txt)
+        # keep EN; explicitly filter ES
+        if lang == "es":
+            return True
+        return lang != "en"
+    except Exception:
+        return False
+
 def main():
     feeds = _load_feeds()
     all_items = []
@@ -79,9 +94,16 @@ def main():
             summary = getattr(e, "summary", getattr(e, "description", "")).strip()
             link = getattr(e, "link", "").strip()
             published = _norm_time(getattr(e, "published", getattr(e, "updated", "")))
+
             content_text = title + "\n\n" + summary
+
+            # 1) topical filter
             if not _match_us_senior(content_text):
                 continue
+            # 2) language filter
+            if _is_spanish_or_not_english(content_text):
+                continue
+
             uid = _hash(link or title or (published or "") )
             all_items.append({
                 "id": uid,
@@ -92,7 +114,7 @@ def main():
                 "published": published,
                 "fetched": now_iso,
             })
-        time.sleep(0.2)  # be polite
+        time.sleep(0.15)
 
     # Deduplicate by link/id
     dedup = {}
