@@ -7,7 +7,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 SITE = ROOT / "site"
 ARCH = SITE / "archive"
-CSS = SITE / "styles.css"
 SITE.mkdir(exist_ok=True)
 ARCH.mkdir(parents=True, exist_ok=True)
 
@@ -28,7 +27,6 @@ def group_by_period(items: list[dict]):
     this_week_start = today - timedelta(days=today.weekday())
     this_month_start = today.replace(day=1)
     this_year_start = today.replace(month=1, day=1)
-
     buckets = {"today":[], "week":[], "month":[], "year":[]}
     for it in items:
         d = it.get("published") or it.get("fetched")
@@ -36,14 +34,10 @@ def group_by_period(items: list[dict]):
             dt = datetime.fromisoformat(d.replace("Z","+00:00")).date()
         except Exception:
             continue
-        if dt == today:
-            buckets["today"].append(it)
-        if dt >= this_week_start:
-            buckets["week"].append(it)
-        if dt >= this_month_start:
-            buckets["month"].append(it)
-        if dt >= this_year_start:
-            buckets["year"].append(it)
+        if dt == today: buckets["today"].append(it)
+        if dt >= this_week_start: buckets["week"].append(it)
+        if dt >= this_month_start: buckets["month"].append(it)
+        if dt >= this_year_start: buckets["year"].append(it)
     return buckets
 
 def html_escape(s: str) -> str:
@@ -70,8 +64,7 @@ def render_cards(items: list[dict]) -> str:
     return "\n".join(parts)
 
 def render_alerts(alerts: list[dict]) -> str:
-    if not alerts:
-        return "<p class='muted'>No new scam alerts detected.</p>"
+    if not alerts: return "<p class='muted'>No new scam alerts detected.</p>"
     lis = []
     for it in alerts[:10]:
         title = html_escape(it.get("title",""))
@@ -82,14 +75,13 @@ def render_alerts(alerts: list[dict]) -> str:
     return "<ul class='alerts'>" + "\n".join(lis) + "</ul>"
 
 def render_category_counts(counts: dict) -> str:
-    if not counts:
-        return ""
+    if not counts: return ""
     chips = []
     for cat, n in counts.items():
         chips.append(f"<span class='count-chip'>{html_escape(cat)}: <b>{n}</b></span>")
     return "<div class='counts'>" + " ".join(chips) + "</div>"
 
-def build_index():
+def main():
     items = ITEMS.get("items", [])
     buckets = group_by_period(items)
     summary_text = html_escape(DIGEST.get("summary",""))
@@ -99,7 +91,10 @@ def build_index():
     hero_title = "Plan boldly. Retire confidently."
     venmo_footer = "Venmo donations are welcome! @MikeHnastchenko"
     updated = now.strftime("%Y-%m-%d %H:%M UTC")
-    fetched_date = html_escape((ITEMS.get("updated") or "")[:10])  # Articles retrieved date (YYYY-MM-DD)
+    fetched_date = html_escape((ITEMS.get("updated") or "")[:10])
+
+    # If no “today”, start on “week” to avoid blank main page
+    default_tab = "today" if buckets["today"] else "week"
 
     template = """<!doctype html>
 <html lang="en">
@@ -114,10 +109,17 @@ def build_index():
   <div class="hero-title">__HERO__</div>
   <p class="muted">Daily AI-generated summary on U.S. senior news.</p>
   <div class="retrieved">Articles retrieved: <b>__FETCHED__</b></div>
+
+  <div class="controls">
+    <input id="extraUrl" class="input" placeholder="Paste a URL (RSS or article) and click Fetch Now" />
+    <button id="fetchNow" class="btn">Download new articles</button>
+    <button id="setPAT" class="btn secondary" title="Optional: store a GitHub token locally to trigger updates">Set API token</button>
+    <div class="hint muted">Tip: The token is stored in your browser only (localStorage). Scope: workflow (public repo).</div>
+  </div>
 </header>
 
 <nav class="chips">
-  <button data-filter="today" class="chip active">Today</button>
+  <button data-filter="today" class="chip">Today</button>
   <button data-filter="week" class="chip">This Week</button>
   <button data-filter="month" class="chip">This Month</button>
   <button data-filter="year" class="chip">This Year</button>
@@ -137,8 +139,8 @@ def build_index():
   __ALERTS__
 </section>
 
-<section id="list" class="grid" data-active="today">
-  <div data-period="today" class="panel show">
+<section id="list" class="grid" data-active="__DEFAULT__">
+  <div data-period="today" class="panel">
     __TODAY__
   </div>
   <div data-period="week" class="panel">
@@ -161,62 +163,84 @@ def build_index():
 </footer>
 
 <script>
-// Filter chips
-const chips = document.querySelectorAll('.chip[data-filter]');
-const panels = document.querySelectorAll('.panel');
-chips.forEach(ch => ch.addEventListener('click', () => {
-  chips.forEach(c => c.classList.remove('active'));
-  ch.classList.add('active');
-  const f = ch.getAttribute('data-filter');
-  panels.forEach(p => p.classList.remove('show'));
-  const sel = ".panel[data-period='" + f + "']";
-  document.querySelector(sel).classList.add('show');
-}));
+(function(){
+  // Derive owner/repo from GitHub Pages URL (owner.github.io/repo)
+  const host = location.host; // e.g. architeketh.github.io
+  const path = location.pathname.replace(/^\\//,''); // e.g. senior-news-daily/
+  const owner = host.split('.')[0];
+  const repo = path.split('/')[0] || 'senior-news-daily';
+  const workflowFile = 'pages.yml'; // our workflow file name
 
-// Saved articles (localStorage)
-const SAVED_KEY = "snd_saved_ids";
-function getSaved() {
-  try { return JSON.parse(localStorage.getItem(SAVED_KEY) || "[]"); } catch(e) { return []; }
-}
-function setSaved(arr) {
-  localStorage.setItem(SAVED_KEY, JSON.stringify(Array.from(new Set(arr))));
-}
-function toggleSave(id) {
-  const cur = getSaved();
-  if (cur.includes(id)) {
-    setSaved(cur.filter(x => x !== id));
-  } else {
-    cur.push(id);
-    setSaved(cur);
+  // UI state
+  const chips = document.querySelectorAll('.chip[data-filter]');
+  const panels = document.querySelectorAll('.panel');
+  function show(tab){
+    chips.forEach(c => c.classList.toggle('active', c.getAttribute('data-filter')===tab));
+    panels.forEach(p => p.classList.toggle('show', p.getAttribute('data-period')===tab));
   }
-  updateSavedUI();
-}
-function updateSavedUI() {
-  const cur = new Set(getSaved());
-  document.querySelectorAll('.card .save').forEach(btn => {
-    const id = btn.getAttribute('data-id');
-    btn.innerHTML = cur.has(id) ? "&#9733;" : "&#9734;"; // filled vs hollow star
+  show('__DEFAULT__');
+
+  chips.forEach(ch => ch.addEventListener('click', () => show(ch.getAttribute('data-filter'))));
+
+  // Saved articles
+  const SAVED_KEY="snd_saved_ids";
+  function getSaved(){ try { return JSON.parse(localStorage.getItem(SAVED_KEY)||"[]"); } catch(e){ return []; } }
+  function setSaved(arr){ localStorage.setItem(SAVED_KEY, JSON.stringify(Array.from(new Set(arr)))); }
+  function updateSavedUI(){
+    const cur = new Set(getSaved());
+    document.querySelectorAll('.card .save').forEach(btn=>{
+      const id = btn.getAttribute('data-id');
+      btn.innerHTML = cur.has(id) ? "&#9733;" : "&#9734;";
+    });
+    const savedPanel = document.querySelector('.panel[data-period="saved"]');
+    const cards = Array.from(document.querySelectorAll('.card'));
+    const savedCards = cards.filter(c => cur.has(c.getAttribute('data-id')));
+    savedPanel.innerHTML = savedCards.length ? savedCards.map(c=>c.outerHTML).join("") : '<div class="muted">No saved articles yet.</div>';
+  }
+  document.addEventListener('click', (e)=>{
+    const t = e.target;
+    if (t && t.classList.contains('save')) {
+      e.preventDefault();
+      const id = t.getAttribute('data-id');
+      const cur = getSaved();
+      if (cur.includes(id)) setSaved(cur.filter(x=>x!==id)); else { cur.push(id); setSaved(cur); }
+      updateSavedUI();
+    }
   });
+  updateSavedUI();
 
-  // Build saved panel content
-  const savedPanel = document.querySelector('.panel[data-period="saved"]');
-  const cards = Array.from(document.querySelectorAll('.card'));
-  const savedCards = cards.filter(c => cur.has(c.getAttribute('data-id')));
-  if (savedCards.length) {
-    savedPanel.innerHTML = savedCards.map(c => c.outerHTML).join("");
-  } else {
-    savedPanel.innerHTML = '<div class="muted">No saved articles yet.</div>';
+  // Optional: trigger workflow_dispatch from the page (requires user-provided token)
+  const BTN = document.getElementById('fetchNow');
+  const SET = document.getElementById('setPAT');
+  const URL = document.getElementById('extraUrl');
+  const TOKEN_KEY='snd_pat_token';
+
+  function setToken(){
+    const cur = localStorage.getItem(TOKEN_KEY)||'';
+    const val = prompt('Paste a GitHub Personal Access Token (fine-grained, workflow scope; stored locally only):', cur);
+    if (val!==null){ localStorage.setItem(TOKEN_KEY, val.trim()); alert('Token saved in your browser.'); }
   }
-}
-document.addEventListener('click', (e) => {
-  const t = e.target;
-  if (t && t.classList.contains('save')) {
-    e.preventDefault();
-    const id = t.getAttribute('data-id');
-    toggleSave(id);
+  async function dispatch(){
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token){ alert('Set a GitHub token first. Click "Set API token".'); return; }
+    const extra = (URL.value||'').trim();
+    const body = { ref: "main", inputs: {} };
+    if (extra) body.inputs = { extra_url: extra };
+    const endpoint = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflowFile}/dispatches`;
+    const resp = await fetch(endpoint, {
+      method:'POST',
+      headers:{ 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github+json' },
+      body: JSON.stringify(body)
+    });
+    if (resp.status===204){ alert('Workflow dispatched! Refresh the site in ~1–2 minutes.'); }
+    else {
+      const t = await resp.text();
+      alert('Failed to dispatch workflow. Status '+resp.status+'\\n'+t);
+    }
   }
-});
-updateSavedUI();
+  if (SET) SET.addEventListener('click', setToken);
+  if (BTN) BTN.addEventListener('click', dispatch);
+})();
 </script>
 </body>
 </html>
@@ -233,34 +257,25 @@ updateSavedUI();
             .replace("__UPDATED__", updated)
             .replace("__VENMO__", venmo_footer)
             .replace("__FETCHED__", fetched_date or "—")
+            .replace("__DEFAULT__", default_tab)
             )
     (SITE / "index.html").write_text(html, encoding="utf-8")
 
-def build_archive():
-    items = ITEMS.get("items", [])
+    # Build archive by day
     by_day = {}
     for it in items:
         d = fmt_date(it.get("published") or it.get("fetched"))
         by_day.setdefault(d, []).append(it)
-
-    # Archive index
     links = []
     for day in sorted(by_day.keys(), reverse=True):
         links.append(f"<li><a href='{day}.html'>{day}</a> <span class='muted'>({len(by_day[day])})</span></li>")
     (ARCH / "index.html").write_text(
         "<!doctype html><meta charset='utf-8'><link rel=stylesheet href='../styles.css'>"
         + "<h1>Archive by Day</h1><ul>" + "\n".join(links) + "</ul>", encoding="utf-8")
-
-    # Daily pages
     for day, its in by_day.items():
         (ARCH / f"{day}.html").write_text(
             "<!doctype html><meta charset='utf-8'><link rel=stylesheet href='../styles.css'>"
             + f"<h1>{day}</h1>" + render_cards(its), encoding="utf-8")
-
-def main():
-    build_index()
-    build_archive()
-    print(f"[site] Built pages in {SITE}")
 
 if __name__ == "__main__":
     main()
