@@ -1,10 +1,18 @@
+# data/feeds.yaml
 feeds:
   - https://press.aarp.org/rss
   - https://www.kff.org/topic/medicare/feed/
-  - https://www.cms.gov/about-cms/contact/newsroom/rss.xml
+  - https://www.kff.org/topic/medicaid/feed/
+  - https://kffhealthnews.org/topic/aging/feed/
   - https://www.ssa.gov/news/en/press/releases/index.rss
   - https://oig.ssa.gov/rss/news-releases.xml
+  - https://www.cms.gov/about-cms/contact/newsroom/rss.xml
   - https://acl.gov/news/rss.xml
-  - https://kffhealthnews.org/topic/aging/feed/
   - https://www.nia.nih.gov/news/rss.xml
   - https://tools.cdc.gov/api/v2/resources/media/403372.rss
+  - https://www.consumerfinance.gov/about-us/blog/rss/
+  - https://www.fbi.gov/news/stories/feed
+  - https://www.justice.gov/elderjustice/rss.xml
+  - https://www.ftc.gov/news-events/news/rss
+  - https://www.hhs.gov/about/news/rss.xml
+  - https://feeds.npr.org/1001/rss.xml
