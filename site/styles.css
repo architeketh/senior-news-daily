@@ -1,73 +1,68 @@
+/* --- Category palette ---------------------------------------------------- */
 :root{
-  --bg:#ffffff; --fg:#0f172a; --muted:#6b7280; --chip:#eef2ff; --chip-border:#dbeafe;
-  --border:#e5e7eb; --accent:#5b6df8; --accent-2:#7c8cfb; --shadow:0 8px 24px rgba(0,0,0,.08);
+  /* fallback neutrals already exist above */
+  --cat-medicare:           #2563eb;
+  --cat-social-security:    #059669;
+  --cat-finance-retirement: #0ea5e9;
+  --cat-golf-leisure:       #f59e0b;
+  --cat-travel:             #ef4444;
+  --cat-cooking-nutrition:  #e11d48;
+  --cat-caregiving-ltc:     #7c3aed;
+  --cat-aging-research:     #0891b2;
+  --cat-safety-scams:       #dc2626;
+  --cat-policy-legislation: #4b5563;
+  --cat-general:            #6b7280;
 }
-*{box-sizing:border-box}
-body{margin:0;font:16px/1.55 system-ui,Segoe UI,Roboto,Arial;color:var(--fg);background:var(--bg)}
 
-/* Top app bar (purple like Retail Trends) */
-.topbar{
-  display:flex;justify-content:space-between;align-items:center;
-  padding:10px 14px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;
+/* Utility to tint cards by category */
+.card{ position:relative; }
+.card::before{
+  content:"";
+  position:absolute; left:0; top:0; bottom:0; width:6px; opacity:.85;
+  border-top-left-radius:14px; border-bottom-left-radius:14px;
 }
-.brand{display:flex;align-items:center;gap:8px;font-weight:800}
-.logo{font-size:22px}
-.brand-title{font-size:18px}
-.actions{display:flex;gap:8px}
-.btn{padding:8px 12px;border-radius:10px;border:1px solid transparent;cursor:pointer;background:#fff;color:var(--fg)}
-.btn.primary{background:#111;color:#fff}
-.btn.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.45)}
-.btn.ghost:hover{background:rgba(255,255,255,.1)}
 
-/* Hero */
-.site-header.hero{
-  padding:36px 16px 16px;text-align:center;border-bottom:1px solid var(--border);
-  background:radial-gradient(1200px 400px at 50% -50%, #f3f4ff, #ffffff 55%);
-}
-.hero-title{font-size:clamp(30px,6vw,56px);line-height:1.05;font-weight:900;letter-spacing:-.02em;margin-bottom:8px}
-.muted{color:var(--muted)}
-.retrieved{margin-top:6px;font-size:14px;color:var(--muted)}
+/* Map slug classes to colors */
+.card.cat-medicare{           border-color: color-mix(in srgb, var(--cat-medicare) 35%, #fff); }
+.card.cat-medicare::before{   background: var(--cat-medicare); }
+.badge.cat-medicare{          background: color-mix(in srgb, var(--cat-medicare) 18%, #fff); border-color: var(--cat-medicare); }
 
-/* Controls */
-.controls{margin:18px auto 0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;max-width:900px}
-.input{min-width:360px;padding:10px 12px;border:1px solid var(--border);border-radius:10px}
-.hint{width:100%;text-align:center;margin-top:2px}
+.card.cat-social-security{         border-color: color-mix(in srgb, var(--cat-social-security) 35%, #fff); }
+.card.cat-social-security::before{ background: var(--cat-social-security); }
+.badge.cat-social-security{        background: color-mix(in srgb, var(--cat-social-security) 18%, #fff); border-color: var(--cat-social-security); }
 
-/* Chips row */
-.chips{
-  display:flex;flex-wrap:wrap;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);
-  justify-content:center;position:sticky;top:0;background:#fff;z-index:10
-}
-.chip{display:inline-block;padding:8px 12px;border-radius:999px;background:var(--chip);border:1px solid var(--chip-border);
-  cursor:pointer;text-decoration:none;color:#111;font-weight:700}
-.chip.active{background:#111;color:#fff}
+.card.cat-finance-retirement{         border-color: color-mix(in srgb, var(--cat-finance-retirement) 35%, #fff); }
+.card.cat-finance-retirement::before{ background: var(--cat-finance-retirement); }
+.badge.cat-finance-retirement{        background: color-mix(in srgb, var(--cat-finance-retirement) 18%, #fff); border-color: var(--cat-finance-retirement); }
 
-/* Summary + counts + scams */
-.summary,.scams{padding:18px;max-width:1100px;margin:0 auto}
-.summary pre{white-space:pre-wrap;font:inherit;background:#f9fafb;padding:12px;border:1px solid var(--border);border-radius:12px}
-.counts{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px}
-.count-chip{background:#f1f5f9;border:1px solid var(--border);padding:6px 10px;border-radius:999px}
+.card.cat-golf-leisure{         border-color: color-mix(in srgb, var(--cat-golf-leisure) 35%, #fff); }
+.card.cat-golf-leisure::before{ background: var(--cat-golf-leisure); }
+.badge.cat-golf-leisure{        background: color-mix(in srgb, var(--cat-golf-leisure) 18%, #fff); border-color: var(--cat-golf-leisure); }
 
-/* Grid + cards */
-.grid{padding:16px;max-width:1200px;margin:0 auto}
-.panel{display:none}
-.panel.show{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
-.card{position:relative;border:1px solid var(--border);border-radius:14px;background:#fff;box-shadow:var(--shadow);overflow:hidden}
-.card-block{display:block;text-decoration:none;color:inherit;padding:16px 14px 42px}
-.card-title{font-weight:800;margin-bottom:6px;font-size:17px}
-.card-meta{color:var(--muted);font-size:13px}
-.badge{background:#eef2ff;border:1px solid #e0e7ff;padding:2px 6px;border-radius:999px}
+.card.cat-travel{         border-color: color-mix(in srgb, var(--cat-travel) 35%, #fff); }
+.card.cat-travel::before{ background: var(--cat-travel); }
+.badge.cat-travel{        background: color-mix(in srgb, var(--cat-travel) 18%, #fff); border-color: var(--cat-travel); }
 
-/* Save button */
-.save{position:absolute;right:8px;bottom:8px;border:1px solid var(--border);background:#fff;border-radius:10px;padding:6px 10px;cursor:pointer;font-size:16px}
-.save:hover{background:#fafafa}
+.card.cat-cooking-nutrition{         border-color: color-mix(in srgb, var(--cat-cooking-nutrition) 35%, #fff); }
+.card.cat-cooking-nutrition::before{ background: var(--cat-cooking-nutrition); }
+.badge.cat-cooking-nutrition{        background: color-mix(in srgb, var(--cat-cooking-nutrition) 18%, #fff); border-color: var(--cat-cooking-nutrition); }
 
-/* Categories page */
-.container{max-width:1200px;margin:18px auto;padding:0 16px}
-.cat-section{margin-bottom:22px;padding:14px;border:1px solid var(--border);border-radius:14px;background:#fff;box-shadow:var(--shadow)}
-.cat-section h2{margin:0 0 8px;display:flex;align-items:center;gap:8px}
-.count-badge{display:inline-block;background:#eef2ff;border:1px solid #e0e7ff;padding:2px 8px;border-radius:999px;font-size:13px}
-.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.card.cat-caregiving-ltc{         border-color: color-mix(in srgb, var(--cat-caregiving-ltc) 35%, #fff); }
+.card.cat-caregiving-ltc::before{ background: var(--cat-caregiving-ltc); }
+.badge.cat-caregiving-ltc{        background: color-mix(in srgb, var(--cat-caregiving-ltc) 18%, #fff); border-color: var(--cat-caregiving-ltc); }
 
-/* Footer */
-.site-footer{padding:24px;color:var(--muted);border-top:1px solid var(--border);text-align:center;margin-top:12px}
+.card.cat-aging-research{         border-color: color-mix(in srgb, var(--cat-aging-research) 35%, #fff); }
+.card.cat-aging-research::before{ background: var(--cat-aging-research); }
+.badge.cat-aging-research{        background: color-mix(in srgb, var(--cat-aging-research) 18%, #fff); border-color: var(--cat-aging-research); }
+
+.card.cat-safety-scams{         border-color: color-mix(in srgb, var(--cat-safety-scams) 35%, #fff); }
+.card.cat-safety-scams::before{ background: var(--cat-safety-scams); }
+.badge.cat-safety-scams{        background: color-mix(in srgb, var(--cat-safety-scams) 18%, #fff); border-color: var(--cat-safety-scams); }
+
+.card.cat-policy-legislation{         border-color: color-mix(in srgb, var(--cat-policy-legislation) 35%, #fff); }
+.card.cat-policy-legislation::before{ background: var(--cat-policy-legislation); }
+.badge.cat-policy-legislation{        background: color-mix(in srgb, var(--cat-policy-legislation) 18%, #fff); border-color: var(--cat-policy-legislation); }
+
+.card.cat-general{         border-color: color-mix(in srgb, var(--cat-general) 35%, #fff); }
+.card.cat-general::before{ background: var(--cat-general); }
+.badge.cat-general{        background: color-mix(in srgb, var(--cat-general) 18%, #fff); border-color: var(--cat-general); }
