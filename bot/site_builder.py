@@ -1,13 +1,14 @@
 # bot/site_builder.py
 """
-Senior News Daily — Site Builder
-- Hero banner
-- Category chips (color-matched to categories)
-- Saved chip (shows only starred items)
-- Category-colored article cards + badges
-- Scam alerts
-- Archive pages (site/archive/YYYY-MM-DD.html) + linked list
-- Auto-generates styles.css so formatting can't go missing
+Senior News Daily — Complete Site Builder
+Includes:
+- Hero banner ("Plan boldly. Retire confidently.")
+- Category chips + Saved filter
+- Colored cards & badges
+- Scam Alerts
+- Archive pages (site/archive/YYYY-MM-DD.html)
+- Saved Articles page (site/saved.html)
+- Auto-generated styles.css (never lose formatting)
 """
 
 import json, datetime, pathlib, re
@@ -65,12 +66,11 @@ padding:1rem 1.25rem;position:relative;transition:.2s}
 .save:hover{color:#111827}
 .filterbar{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0 1rem}
 .chip{border:1px solid #d1d5db;border-radius:9999px;padding:.4rem .9rem;cursor:pointer;font-weight:700;background:#f3f4f6;color:#111}
-.chip b{font-weight:800}.chip.active{outline:2px solid #111; color:#111; background:#fff}
+.chip b{font-weight:800}.chip.active{outline:2px solid #111;color:#111;background:#fff}
 .alerts li,.archives li{margin:.4rem 0}
 .footer{text-align:center;background:#111827;color:#cbd5e1;padding:2rem 1rem}
 .footer a,.footer strong{color:#facc15}
-
-/* Category palette (cards, badges, and chips share colors) */
+/* Category palette */
 :root{
 --cat-medicare:#2563eb;--cat-social-security:#059669;--cat-finance-retirement:#0ea5e9;
 --cat-golf-leisure:#f59e0b;--cat-travel:#ef4444;--cat-cooking-nutrition:#e11d48;
@@ -88,18 +88,7 @@ padding:1rem 1.25rem;position:relative;transition:.2s}
 .card.cat-policy-legislation::before{background:var(--cat-policy-legislation)}
 .card.cat-general::before{background:var(--cat-general)}
 .badge{display:inline-block;border:1px solid transparent;border-radius:4px;padding:0 .4em;font-size:.75rem;font-weight:700}
-.badge.cat-medicare{background:#dbeafe;border-color:var(--cat-medicare)}
-.badge.cat-social-security{background:#d1fae5;border-color:var(--cat-social-security)}
-.badge.cat-finance-retirement{background:#cffafe;border-color:var(--cat-finance-retirement)}
-.badge.cat-golf-leisure{background:#fef3c7;border-color:var(--cat-golf-leisure)}
-.badge.cat-travel{background:#fee2e2;border-color:var(--cat-travel)}
-.badge.cat-cooking-nutrition{background:#ffe4e6;border-color:var(--cat-cooking-nutrition)}
-.badge.cat-caregiving-ltc{background:#ede9fe;border-color:var(--cat-caregiving-ltc)}
-.badge.cat-aging-research{background:#cffafe;border-color:var(--cat-aging-research)}
-.badge.cat-safety-scams{background:#fee2e2;border-color:var(--cat-safety-scams)}
-.badge.cat-policy-legislation{background:#e5e7eb;border-color:var(--cat-policy-legislation)}
-.badge.cat-general{background:#f3f4f6;border-color:var(--cat-general)}
-/* Color chips to match categories */
+.badge[class*="cat-"]{background:#f3f4f6;border-color:#d1d5db}
 .chip[data-cat="medicare"]{background:#dbeafe;border-color:var(--cat-medicare)}
 .chip[data-cat="social-security"]{background:#d1fae5;border-color:var(--cat-social-security)}
 .chip[data-cat="finance-retirement"]{background:#cffafe;border-color:var(--cat-finance-retirement)}
@@ -122,162 +111,123 @@ items = items_blob.get("items", [])
 summary = digest_blob.get("summary", "")
 alerts = digest_blob.get("alerts", [])
 generated = digest_blob.get("generated", datetime.datetime.utcnow().isoformat())
-
-for it in items:
-    it["category"] = it.get("category") or "General"
+for it in items: it["category"] = it.get("category") or "General"
 
 # -------------------- Components ------------------------
 def render_card(it):
     cat = it["category"]
-    cat_slug = slugify(cat)
+    slug = slugify(cat)
     return (
-        "<div class='card cat-{slug}' data-id='{id}' data-cat='{slug}'>"
-        "<a class='card-block' href='{link}' target='_blank' rel='noopener'>"
-        "<div class='card-title'>{title}</div>"
-        "<div class='card-meta'>{source} · {date} · <span class='badge cat-{slug}'>{cat}</span></div>"
-        "<div class='card-summary'>{summary}</div></a>"
-        "<button class='save' data-id='{id}' title='Save' aria-label='Save'>&#9734;</button></div>"
-    ).format(
-        slug=esc(cat_slug),
-        id=esc(it.get("id", "")),
-        link=esc(it.get("link", "")),
-        title=esc(it.get("title", "")),
-        source=esc(it.get("source", "")),
-        date=fmt_date(it.get("published") or it.get("fetched")),
-        cat=esc(cat),
-        summary=esc((it.get("summary") or "")[:250]),
+        f"<div class='card cat-{slug}' data-id='{esc(it.get('id',''))}' data-cat='{slug}'>"
+        f"<a class='card-block' href='{esc(it.get('link',''))}' target='_blank'>"
+        f"<div class='card-title'>{esc(it.get('title',''))}</div>"
+        f"<div class='card-meta'>{esc(it.get('source',''))} · {fmt_date(it.get('published') or it.get('fetched'))} · <span class='badge cat-{slug}'>{esc(cat)}</span></div>"
+        f"<div class='card-summary'>{esc(it.get('summary','')[:250])}</div></a>"
+        f"<button class='save' data-id='{esc(it.get('id',''))}'>&#9734;</button></div>"
     )
 
-def render_cards(arr): 
-    return "\n".join(render_card(it) for it in arr)
+def render_cards(arr): return "\n".join(render_card(it) for it in arr)
 
 def render_alerts(alerts):
     if not alerts: return "<p>No current scam alerts.</p>"
     out = ["<ul class='alerts'>"]
     for a in alerts:
-        out.append("<li><a href='{0}' target='_blank'>{1}</a> <small>{2}</small></li>".format(
-            esc(a.get("link","")), esc(a.get("title","")), fmt_date(a.get("published") or a.get("fetched"))
-        ))
+        out.append(f"<li><a href='{esc(a.get('link',''))}' target='_blank'>{esc(a.get('title',''))}</a> <small>{fmt_date(a.get('published'))}</small></li>")
     out.append("</ul>")
     return "\n".join(out)
 
 def build_archive_pages(items):
-    """Write site/archive/YYYY-MM-DD.html and return a linked <ul> list."""
     by_day = defaultdict(list)
     for it in items:
         d = day_key(it)
         if d: by_day[d].append(it)
-
-    # write day pages
     for d, its in by_day.items():
-        body = """
-        <!doctype html><meta charset="utf-8">
-        <link rel="stylesheet" href="../styles.css">
-        <div class="topnav"><div class="container">
-          <a href="../index.html">← Back to Home</a>
-          <div class="muted">Archive: {day}</div>
-        </div></div>
-        <main class="container">
-          <h1>Archive — {day}</h1>
-          <section class="articles"><div id="cards">{cards}</div></section>
-        </main>
-        <footer class="footer"><p>Venmo donations: <strong>@MikeHnastchenko</strong></p></footer>
-        """.format(day=esc(d), cards=render_cards(its))
+        body = f"""<!doctype html><meta charset='utf-8'>
+        <link rel='stylesheet' href='../styles.css'>
+        <div class='topnav'><div class='container'><a href='../index.html'>← Home</a><div class='muted'>Archive: {esc(d)}</div></div></div>
+        <main class='container'><h1>Archive — {esc(d)}</h1><div id='cards'>{render_cards(its)}</div></main>
+        <footer class='footer'><p>Venmo donations: <strong>@MikeHnastchenko</strong></p></footer>"""
         (ARCH / f"{d}.html").write_text(body, encoding="utf-8")
-
-    # return list with links
     out = ["<ul class='archives'>"]
     for d in sorted(by_day.keys(), reverse=True):
-        count = len(by_day[d])
-        out.append("<li><a href='archive/{d}.html'>{d}</a> <span class='muted'>({n} articles)</span></li>".format(d=esc(d), n=count))
+        n = len(by_day[d])
+        out.append(f"<li><a href='archive/{esc(d)}.html'>{esc(d)}</a> <span class='muted'>({n} articles)</span></li>")
     out.append("</ul>")
     return "\n".join(out)
 
-# Build category chips (+ Saved chip)
+# Chips
 cat_counts = Counter(it["category"] for it in items)
-chips = ["<button class='chip active' data-cat='__all'>All <b>{}</b></button>".format(sum(cat_counts.values()))]
-chips.append("<button class='chip' data-cat='__saved'>Saved <b>★</b></button>")
-for cat, n in sorted(cat_counts.items(), key=lambda kv:(-kv[1], kv[0].lower())):
-    chips.append("<button class='chip' data-cat='{slug}'>{cat} <b>{n}</b></button>".format(
-        slug=esc(slugify(cat)), cat=esc(cat), n=n))
+chips = ["<button class='chip active' data-cat='__all'>All <b>{}</b></button>".format(sum(cat_counts.values())),
+         "<button class='chip' data-cat='__saved'>Saved <b>★</b></button>"]
+for cat,n in sorted(cat_counts.items(), key=lambda kv:(-kv[1], kv[0].lower())):
+    chips.append(f"<button class='chip' data-cat='{slugify(cat)}'>{esc(cat)} <b>{n}</b></button>")
 chips_html = "\n".join(chips)
 
-# -------------------- HTML Template ---------------------
+# -------------------- Templates -------------------------
 template = """<!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Senior News Daily</title>
-<link rel="stylesheet" href="styles.css">
-</head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Senior News Daily</title><link rel="stylesheet" href="styles.css"></head>
 <body>
-<header class="hero">
-  <h1>Plan boldly. Retire confidently.</h1>
-  <p class="subtitle">AI-powered daily insights for seniors — health, finance, leisure & scams.</p>
-</header>
+<header class="hero"><h1>Plan boldly. Retire confidently.</h1>
+<p class="subtitle">AI-powered daily insights for seniors — health, finance, leisure & scams.</p></header>
 <div class="topnav"><div class="container">
-  <a href="index.html">Home</a>
-  <a href="archive/">Archive</a>
-</div></div>
+<a href="index.html">Home</a><a href="saved.html">Saved</a><a href="archive/">Archive</a></div></div>
 <main class="container">
-  <section class="summary">
-    <h2>Daily Summary</h2>
-    <p>__SUMMARY__</p>
-    <p class="muted">Last updated: __UPDATED__</p>
-  </section>
-  <section class="filters">
-    <h2>Filter by Category</h2><div class="filterbar">__CHIPS__</div>
-  </section>
-  <section class="articles"><h2>Latest Articles</h2><div id="cards">__CARDS__</div></section>
-  <section class="scam-alerts"><h2>⚠️ Scam Alerts</h2>__ALERTS__</section>
-  <section class="archives"><h2>Archives</h2>__ARCHIVES__</section>
-</main>
-<footer class="footer">
-  <p>Venmo donations are welcome! <strong>@MikeHnastchenko</strong></p>
-  <p class="muted">© __YEAR__ Senior News Daily — All Rights Reserved</p>
-</footer>
+<section class="summary"><h2>Daily Summary</h2><p>__SUMMARY__</p>
+<p class="muted">Last updated: __UPDATED__</p></section>
+<section class="filters"><h2>Filter by Category</h2><div class="filterbar">__CHIPS__</div></section>
+<section class="articles"><h2>Latest Articles</h2><div id="cards">__CARDS__</div></section>
+<section class="scam-alerts"><h2>⚠️ Scam Alerts</h2>__ALERTS__</section>
+<section class="archives"><h2>Archives</h2>__ARCHIVES__</section></main>
+<footer class="footer"><p>Venmo: <strong>@MikeHnastchenko</strong></p>
+<p class="muted">© __YEAR__ Senior News Daily — All Rights Reserved</p></footer>
 <script>
-// filtering + saved view (unchanged JS)
 const cards=[...document.querySelectorAll('#cards .card')];
 const chips=[...document.querySelectorAll('.chip')];
 function getSaved(){try{return JSON.parse(localStorage.getItem('snd_saved')||'[]');}catch(e){return[]}}
 function setSaved(v){localStorage.setItem('snd_saved',JSON.stringify([...new Set(v)]));}
 function updateStars(){const cur=new Set(getSaved());document.querySelectorAll('.save').forEach(b=>{b.innerHTML=cur.has(b.dataset.id)?'★':'☆';});}
 function applyFilter(slug){
-  if(slug==='__saved'){
-    const cur=new Set(getSaved());
-    cards.forEach(c=>{c.style.display=cur.has(c.dataset.id)?'':'none';});
-  }else{
-    cards.forEach(c=>{c.style.display=(slug==='__all'||c.dataset.cat===slug)?'':'none';});
-  }
-  chips.forEach(ch=>ch.classList.toggle('active',ch.dataset.cat===slug));
-  localStorage.setItem('snd_cat',slug);
-}
+ if(slug==='__saved'){const cur=new Set(getSaved());cards.forEach(c=>c.style.display=cur.has(c.dataset.id)?'':'none');}
+ else{cards.forEach(c=>c.style.display=(slug==='__all'||c.dataset.cat===slug)?'':'none');}
+ chips.forEach(ch=>ch.classList.toggle('active',ch.dataset.cat===slug));
+ localStorage.setItem('snd_cat',slug);}
 chips.forEach(ch=>ch.addEventListener('click',()=>applyFilter(ch.dataset.cat)));
-document.addEventListener('click',e=>{
-  if(e.target.classList.contains('save')){
-    const id=e.target.dataset.id;const cur=new Set(getSaved());
-    cur.has(id)?cur.delete(id):cur.add(id);
-    setSaved([...cur]);updateStars();
-  }
-});
-updateStars();
-applyFilter(localStorage.getItem('snd_cat')||'__all');
-</script>
-</body></html>
-"""
+document.addEventListener('click',e=>{if(e.target.classList.contains('save')){const id=e.target.dataset.id;
+ const cur=new Set(getSaved());cur.has(id)?cur.delete(id):cur.add(id);setSaved([...cur]);updateStars();}});
+updateStars();applyFilter(localStorage.getItem('snd_cat')||'__all');
+</script></body></html>"""
 
-# Safely inject content
-home_html = (
-    template
-    .replace("__SUMMARY__", esc(summary))
-    .replace("__UPDATED__", fmt_date(generated))
-    .replace("__CHIPS__", chips_html)
-    .replace("__CARDS__", render_cards(items))
-    .replace("__ALERTS__", render_alerts(alerts))
-    .replace("__ARCHIVES__", build_archive_pages(items))
-    .replace("__YEAR__", str(datetime.date.today().year))
-)
-
+# -------------------- Build -----------------------------
+archives_html = build_archive_pages(items)
+home_html = (template.replace("__SUMMARY__", esc(summary))
+                     .replace("__UPDATED__", fmt_date(generated))
+                     .replace("__CHIPS__", chips_html)
+                     .replace("__CARDS__", render_cards(items))
+                     .replace("__ALERTS__", render_alerts(alerts))
+                     .replace("__ARCHIVES__", archives_html)
+                     .replace("__YEAR__", str(datetime.date.today().year)))
 (SITE / "index.html").write_text(home_html, encoding="utf-8")
-print(f"[site_builder] Built site/index.html and archive pages successfully.")
+
+# Saved Articles page (loads from localStorage)
+saved_html = """<!doctype html><meta charset='utf-8'><title>Saved Articles — Senior News Daily</title>
+<link rel='stylesheet' href='styles.css'>
+<div class='topnav'><div class='container'><a href='index.html'>← Home</a><div class='muted'>Saved Articles</div></div></div>
+<main class='container'><h1>Saved Articles</h1><div id='savedCards'></div></main>
+<footer class='footer'><p>Venmo: <strong>@MikeHnastchenko</strong></p></footer>
+<script>
+const data=JSON.parse(localStorage.getItem('snd_saved_data')||'[]'); // future use
+const savedIds=new Set(JSON.parse(localStorage.getItem('snd_saved')||'[]'));
+const allCards=[...document.createElement('div').querySelectorAll]; // placeholder
+fetch('index.html').then(r=>r.text()).then(t=>{
+ const parser=new DOMParser();const doc=parser.parseFromString(t,'text/html');
+ const cards=[...doc.querySelectorAll('.card')];
+ const area=document.querySelector('#savedCards');
+ const filtered=cards.filter(c=>savedIds.has(c.dataset.id));
+ area.innerHTML=filtered.length?filtered.map(c=>c.outerHTML).join(''):'<p>No saved articles yet.</p>';
+});
+</script>"""
+(SITE / "saved.html").write_text(saved_html, encoding="utf-8")
+
+print(f"[site_builder] Built site with {len(items)} articles, {len(cat_counts)} categories, archives + saved page.")
