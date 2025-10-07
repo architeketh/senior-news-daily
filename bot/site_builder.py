@@ -157,8 +157,17 @@ def render_cards(arr):
     return "\n".join(render_card(it) for it in arr)
 
 def render_alerts(alerts):
-    if not alerts: return "<p>No current scam alerts.</p>"
-    out = ["<ul class='alerts'>"]
+    # Always include AARP Scam Map link at the top
+    aarp_link = (
+        "<p><strong>📍 Track scams nationwide:</strong> "
+        "<a href='https://www.aarp.org/money/scams-fraud/tracking-map/?cmp=KNC-DSM-FRAUD-SCAM-MAP-2022-GOOGNB-SITELINK&gad_source=1&gad_campaignid=12138172264&gbraid=0AAAAABqr32NvEIvaZXlmevMi1CuuwcbmK&gclid=Cj0KCQjw9JLHBhC-ARIsAK4Phcrm2_kkrTByvsueL6MCpAJ4hTiCWjqnDDL9LSYna40RW1tfBnKQ9_caAjABEALw_wcB' "
+        "target='_blank' rel='noopener'><strong>AARP Scam Tracking Map</strong></a></p>"
+    )
+
+    if not alerts:
+        return aarp_link + "<p>No current scam alerts.</p>"
+
+    out = [aarp_link, "<ul class='alerts'>"]
     for a in alerts:
         out.append(
             f"<li><a href='{esc(a.get('link',''))}' target='_blank'>{esc(a.get('title',''))}</a> "
@@ -166,6 +175,7 @@ def render_alerts(alerts):
         )
     out.append("</ul>")
     return "\n".join(out)
+
 
 def build_archive_pages(items):
     """
