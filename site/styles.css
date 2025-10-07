@@ -7,20 +7,27 @@ body { margin:0; font: 16px/1.55 system-ui,Segoe UI,Roboto,Arial; color:var(--fg
 
 /* Hero like Retail Trends */
 .site-header.hero {
-  padding: 48px 16px 28px;
+  padding: 48px 16px 20px;
   text-align:center;
   border-bottom:1px solid var(--border);
   background: radial-gradient(1200px 400px at 50% -50%, #fafafa, #ffffff 60%);
 }
 .hero-title {
-  font-size: clamp(28px, 5vw, 52px);
-  line-height: 1.1;
-  font-weight: 800;
+  font-size: clamp(32px, 6vw, 60px);
+  line-height: 1.05;
+  font-weight: 900;
   letter-spacing: -0.02em;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .muted { color: var(--muted); }
 .retrieved { margin-top: 6px; font-size: 14px; color: var(--muted); }
+
+/* Controls */
+.controls { margin: 20px auto 0; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; max-width: 900px; }
+.input { min-width: 360px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; }
+.btn { padding:10px 14px; border-radius:10px; border:1px solid var(--border); background:#111; color:#fff; cursor:pointer; }
+.btn.secondary { background:#fff; color:#111; }
+.hint { margin-top: 4px; }
 
 /* Chips */
 .chips {
@@ -52,7 +59,7 @@ body { margin:0; font: 16px/1.55 system-ui,Segoe UI,Roboto,Arial; color:var(--fg
   border-radius:14px; background:#fff; box-shadow: var(--shadow); overflow:hidden;
 }
 .card-block { display:block; text-decoration:none; color:inherit; padding:16px 14px 42px; }
-.card-title { font-weight:700; margin-bottom:6px; font-size: 17px; }
+.card-title { font-weight:800; margin-bottom:6px; font-size: 17px; }
 .card-meta { color: var(--muted); font-size: 13px; }
 .badge { background:#eef2ff; border:1px solid #e0e7ff; padding:2px 6px; border-radius:999px; }
 
