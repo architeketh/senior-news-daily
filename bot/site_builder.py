@@ -1,18 +1,24 @@
 # bot/site_builder.py
 """
 Senior News Daily — Complete Site Builder
-Includes:
+Outputs:
+- site/index.html
+- site/archive/YYYY-MM-DD.html (+ site/archive/index.html)
+- site/saved.html
+- site/styles.css  (auto-generated each build)
+
+Features:
 - Hero banner ("Plan boldly. Retire confidently.")
-- Category chips + Saved filter
-- Colored cards & badges
-- Scam Alerts
-- Archive pages (site/archive/YYYY-MM-DD.html)
-- Saved Articles page (site/saved.html)
-- Auto-generated styles.css (never lose formatting)
+- Category chips (color matches card/badge), Saved chip
+- Colored cards & badges by category
+- Scam Alerts section
+- Per-day archive pages with links
+- "Next update in Xh Ym · <UTC time>" badge
 """
 
 import json, datetime, pathlib, re
 from collections import Counter, defaultdict
+from datetime import datetime as dt, timezone, timedelta
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -32,8 +38,8 @@ def fmt_date(dt_iso: str | None) -> str:
     if not dt_iso:
         return ""
     try:
-        dt = datetime.datetime.fromisoformat(dt_iso.replace("Z", "+00:00"))
-        return dt.strftime("%b %d, %Y")
+        x = datetime.datetime.fromisoformat(dt_iso.replace("Z", "+00:00"))
+        return x.strftime("%b %d, %Y")
     except Exception:
         return (dt_iso or "")[:10]
 
@@ -43,7 +49,27 @@ def day_key(it: dict) -> str:
 def slugify(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (s or "general").lower()).strip("-") or "general"
 
-# ----------------------- CSS ---------------------------
+def next_update_badge(now: dt | None = None) -> str:
+    """
+    Workflow cron: every 12 hours (00:00 and 12:00 UTC).
+    Compute time until the next run and return a small badge string.
+    """
+    now = now or dt.now(timezone.utc)
+    base = now.replace(minute=0, second=0, microsecond=0)
+    slots = [
+        base.replace(hour=0),
+        base.replace(hour=12),
+        (base + timedelta(days=1)).replace(hour=0),
+    ]
+    nxt = min([s for s in slots if s > now], key=lambda d: d)
+    delta = nxt - now
+    hrs = int(delta.total_seconds() // 3600)
+    mins = int((delta.total_seconds() % 3600) // 60)
+    label = f"{hrs}h {mins}m" if hrs else f"{mins}m"
+    when = nxt.strftime("%b %d, %H:%M UTC")
+    return f"<span class='badge' style='margin-left:.5rem;'>Next update in {label} · {when}</span>"
+
+# ----------------------- CSS (auto-emitted) ---------------------------
 CSS = r"""
 *{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#f9fafb;color:#111827;margin:0}
 .container{width:min(1100px,90%);margin:0 auto;padding:1rem 0 3rem}h1,h2,h3{margin:0 0 .5rem}
@@ -70,7 +96,7 @@ padding:1rem 1.25rem;position:relative;transition:.2s}
 .alerts li,.archives li{margin:.4rem 0}
 .footer{text-align:center;background:#111827;color:#cbd5e1;padding:2rem 1rem}
 .footer a,.footer strong{color:#facc15}
-/* Category palette */
+/* Category palette (cards, badges, and chips share colors) */
 :root{
 --cat-medicare:#2563eb;--cat-social-security:#059669;--cat-finance-retirement:#0ea5e9;
 --cat-golf-leisure:#f59e0b;--cat-travel:#ef4444;--cat-cooking-nutrition:#e11d48;
@@ -89,6 +115,7 @@ padding:1rem 1.25rem;position:relative;transition:.2s}
 .card.cat-general::before{background:var(--cat-general)}
 .badge{display:inline-block;border:1px solid transparent;border-radius:4px;padding:0 .4em;font-size:.75rem;font-weight:700}
 .badge[class*="cat-"]{background:#f3f4f6;border-color:#d1d5db}
+/* Color chips to match categories */
 .chip[data-cat="medicare"]{background:#dbeafe;border-color:var(--cat-medicare)}
 .chip[data-cat="social-security"]{background:#d1fae5;border-color:var(--cat-social-security)}
 .chip[data-cat="finance-retirement"]{background:#cffafe;border-color:var(--cat-finance-retirement)}
@@ -111,7 +138,9 @@ items = items_blob.get("items", [])
 summary = digest_blob.get("summary", "")
 alerts = digest_blob.get("alerts", [])
 generated = digest_blob.get("generated", datetime.datetime.utcnow().isoformat())
-for it in items: it["category"] = it.get("category") or "General"
+
+for it in items:
+    it["category"] = it.get("category") or "General"
 
 # -------------------- Components ------------------------
 def render_card(it):
@@ -119,20 +148,23 @@ def render_card(it):
     slug = slugify(cat)
     return (
         f"<div class='card cat-{slug}' data-id='{esc(it.get('id',''))}' data-cat='{slug}'>"
-        f"<a class='card-block' href='{esc(it.get('link',''))}' target='_blank'>"
+        f"<a class='card-block' href='{esc(it.get('link',''))}' target='_blank' rel='noopener'>"
         f"<div class='card-title'>{esc(it.get('title',''))}</div>"
-        f"<div class='card-meta'>{esc(it.get('source',''))} · {fmt_date(it.get('published') or it.get('fetched'))} · <span class='badge cat-{slug}'>{esc(cat)}</span></div>"
+        f"<div class='card-meta'>{esc(it.get('source',''))} · {fmt_date(it.get('published') or it.get('fetched'))} · "
+        f"<span class='badge cat-{slug}'>{esc(cat)}</span></div>"
         f"<div class='card-summary'>{esc(it.get('summary','')[:250])}</div></a>"
-        f"<button class='save' data-id='{esc(it.get('id',''))}'>&#9734;</button></div>"
+        f"<button class='save' data-id='{esc(it.get('id',''))}' title='Save' aria-label='Save'>&#9734;</button></div>"
     )
 
-def render_cards(arr): return "\n".join(render_card(it) for it in arr)
+def render_cards(arr): 
+    return "\n".join(render_card(it) for it in arr)
 
 def render_alerts(alerts):
     if not alerts: return "<p>No current scam alerts.</p>"
     out = ["<ul class='alerts'>"]
     for a in alerts:
-        out.append(f"<li><a href='{esc(a.get('link',''))}' target='_blank'>{esc(a.get('title',''))}</a> <small>{fmt_date(a.get('published'))}</small></li>")
+        out.append(f"<li><a href='{esc(a.get('link',''))}' target='_blank'>{esc(a.get('title',''))}</a> "
+                   f"<small>{fmt_date(a.get('published') or a.get('fetched'))}</small></li>")
     out.append("</ul>")
     return "\n".join(out)
 
@@ -141,13 +173,15 @@ def build_archive_pages(items):
     for it in items:
         d = day_key(it)
         if d: by_day[d].append(it)
+    # write pages
     for d, its in by_day.items():
         body = f"""<!doctype html><meta charset='utf-8'>
-        <link rel='stylesheet' href='../styles.css'>
-        <div class='topnav'><div class='container'><a href='../index.html'>← Home</a><div class='muted'>Archive: {esc(d)}</div></div></div>
-        <main class='container'><h1>Archive — {esc(d)}</h1><div id='cards'>{render_cards(its)}</div></main>
-        <footer class='footer'><p>Venmo donations: <strong>@MikeHnastchenko</strong></p></footer>"""
+<link rel='stylesheet' href='../styles.css'>
+<div class='topnav'><div class='container'><a href='../index.html'>← Home</a><div class='muted'>Archive: {esc(d)}</div></div></div>
+<main class='container'><h1>Archive — {esc(d)}</h1><div id='cards'>{render_cards(its)}</div></main>
+<footer class='footer'><p>Venmo: <strong>@MikeHnastchenko</strong></p></footer>"""
         (ARCH / f"{d}.html").write_text(body, encoding="utf-8")
+    # linked list
     out = ["<ul class='archives'>"]
     for d in sorted(by_day.keys(), reverse=True):
         n = len(by_day[d])
@@ -155,11 +189,13 @@ def build_archive_pages(items):
     out.append("</ul>")
     return "\n".join(out)
 
-# Chips
+# Chips (+ Saved)
 cat_counts = Counter(it["category"] for it in items)
-chips = ["<button class='chip active' data-cat='__all'>All <b>{}</b></button>".format(sum(cat_counts.values())),
-         "<button class='chip' data-cat='__saved'>Saved <b>★</b></button>"]
-for cat,n in sorted(cat_counts.items(), key=lambda kv:(-kv[1], kv[0].lower())):
+chips = [
+    "<button class='chip active' data-cat='__all'>All <b>{}</b></button>".format(sum(cat_counts.values())),
+    "<button class='chip' data-cat='__saved'>Saved <b>★</b></button>",
+]
+for cat, n in sorted(cat_counts.items(), key=lambda kv:(-kv[1], kv[0].lower())):
     chips.append(f"<button class='chip' data-cat='{slugify(cat)}'>{esc(cat)} <b>{n}</b></button>")
 chips_html = "\n".join(chips)
 
@@ -175,7 +211,7 @@ template = """<!doctype html>
 <a href="index.html">Home</a><a href="saved.html">Saved</a><a href="archive/">Archive</a></div></div>
 <main class="container">
 <section class="summary"><h2>Daily Summary</h2><p>__SUMMARY__</p>
-<p class="muted">Last updated: __UPDATED__</p></section>
+<p class="muted">Last updated: __UPDATED__ __BADGE__</p></section>
 <section class="filters"><h2>Filter by Category</h2><div class="filterbar">__CHIPS__</div></section>
 <section class="articles"><h2>Latest Articles</h2><div id="cards">__CARDS__</div></section>
 <section class="scam-alerts"><h2>⚠️ Scam Alerts</h2>__ALERTS__</section>
@@ -201,33 +237,35 @@ updateStars();applyFilter(localStorage.getItem('snd_cat')||'__all');
 
 # -------------------- Build -----------------------------
 archives_html = build_archive_pages(items)
-home_html = (template.replace("__SUMMARY__", esc(summary))
-                     .replace("__UPDATED__", fmt_date(generated))
-                     .replace("__CHIPS__", chips_html)
-                     .replace("__CARDS__", render_cards(items))
-                     .replace("__ALERTS__", render_alerts(alerts))
-                     .replace("__ARCHIVES__", archives_html)
-                     .replace("__YEAR__", str(datetime.date.today().year)))
+badge_html = next_update_badge()
+
+home_html = (template
+    .replace("__SUMMARY__", esc(summary))
+    .replace("__UPDATED__", fmt_date(generated))
+    .replace("__BADGE__", badge_html)
+    .replace("__CHIPS__", chips_html)
+    .replace("__CARDS__", render_cards(items))
+    .replace("__ALERTS__", render_alerts(alerts))
+    .replace("__ARCHIVES__", archives_html)
+    .replace("__YEAR__", str(datetime.date.today().year))
+)
 (SITE / "index.html").write_text(home_html, encoding="utf-8")
 
-# Saved Articles page (loads from localStorage)
+# Saved Articles page (renders user's local saved set by reusing cards from index)
 saved_html = """<!doctype html><meta charset='utf-8'><title>Saved Articles — Senior News Daily</title>
 <link rel='stylesheet' href='styles.css'>
 <div class='topnav'><div class='container'><a href='index.html'>← Home</a><div class='muted'>Saved Articles</div></div></div>
-<main class='container'><h1>Saved Articles</h1><div id='savedCards'></div></main>
+<main class='container'><h1>Saved Articles</h1><div id='savedCards'><p class='muted'>Loading your saved items…</p></div></main>
 <footer class='footer'><p>Venmo: <strong>@MikeHnastchenko</strong></p></footer>
 <script>
-const data=JSON.parse(localStorage.getItem('snd_saved_data')||'[]'); // future use
 const savedIds=new Set(JSON.parse(localStorage.getItem('snd_saved')||'[]'));
-const allCards=[...document.createElement('div').querySelectorAll]; // placeholder
 fetch('index.html').then(r=>r.text()).then(t=>{
- const parser=new DOMParser();const doc=parser.parseFromString(t,'text/html');
- const cards=[...doc.querySelectorAll('.card')];
+ const doc=new DOMParser().parseFromString(t,'text/html');
+ const cards=[...doc.querySelectorAll('.card')].filter(c=>savedIds.has(c.dataset.id));
  const area=document.querySelector('#savedCards');
- const filtered=cards.filter(c=>savedIds.has(c.dataset.id));
- area.innerHTML=filtered.length?filtered.map(c=>c.outerHTML).join(''):'<p>No saved articles yet.</p>';
+ area.innerHTML=cards.length?cards.map(c=>c.outerHTML).join(''):'<p>No saved articles yet.</p>';
 });
 </script>"""
 (SITE / "saved.html").write_text(saved_html, encoding="utf-8")
 
-print(f"[site_builder] Built site with {len(items)} articles, {len(cat_counts)} categories, archives + saved page.")
+print(f"[site_builder] Built site with {len(items)} articles, {len(cat_counts:=Counter(it['category'] for it in items))} categories, archives + saved page.")
