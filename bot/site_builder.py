@@ -1,13 +1,7 @@
 # bot/site_builder.py
 """
-Senior News Daily — Site Builder
-Generates a complete static site with:
-- Hero banner ("Plan boldly. Retire confidently.")
-- Category filter chips
-- Category-colored article cards
-- Scam alerts & archive lists
-- Venmo footer
-- Auto-generated styles.css (ensures formatting never disappears)
+Senior News Daily — Site Builder (safe version)
+Restores formatting, color palette, hero, category filters, and JS — no f-string syntax errors.
 """
 
 import json, datetime, pathlib, re
@@ -21,27 +15,23 @@ SITE.mkdir(parents=True, exist_ok=True)
 ITEMS_PATH = DATA / "items.json"
 DIGEST_PATH = DATA / "digest.json"
 
-# -------------------------------------------------------------------
-# Utilities
-# -------------------------------------------------------------------
+# ----------------------- Helpers -----------------------
 def esc(s: str) -> str:
-    return (s or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 def fmt_date(dt_iso: str | None) -> str:
     if not dt_iso:
         return ""
     try:
-        dt = datetime.datetime.fromisoformat(dt_iso.replace("Z","+00:00"))
+        dt = datetime.datetime.fromisoformat(dt_iso.replace("Z", "+00:00"))
         return dt.strftime("%b %d, %Y")
     except Exception:
         return dt_iso[:10]
 
 def slugify(s: str) -> str:
-    return re.sub(r"[^a-z0-9]+","-", (s or "general").lower()).strip("-")
+    return re.sub(r"[^a-z0-9]+", "-", (s or "general").lower()).strip("-")
 
-# -------------------------------------------------------------------
-# Auto-generate stylesheet so formatting is never lost
-# -------------------------------------------------------------------
+# ----------------------- CSS ---------------------------
 CSS = r"""
 *{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#f9fafb;color:#111827;margin:0}
 .container{width:min(1100px,90%);margin:0 auto;padding:1rem 0 3rem}h1,h2,h3{margin:0 0 .5rem}
@@ -95,38 +85,38 @@ padding:1rem 1.25rem;position:relative;transition:.2s}
 """
 (SITE / "styles.css").write_text(CSS, encoding="utf-8")
 
-# -------------------------------------------------------------------
-# Load data
-# -------------------------------------------------------------------
+# ----------------------- Load Data ----------------------
 items_blob = json.loads(ITEMS_PATH.read_text(encoding="utf-8")) if ITEMS_PATH.exists() else {"items": []}
 digest_blob = json.loads(DIGEST_PATH.read_text(encoding="utf-8")) if DIGEST_PATH.exists() else {}
-
 items = items_blob.get("items", [])
 summary = digest_blob.get("summary", "")
 alerts = digest_blob.get("alerts", [])
 generated = digest_blob.get("generated", datetime.datetime.utcnow().isoformat())
 
-# Ensure every item has a category
 for it in items:
     it["category"] = it.get("category") or "General"
 
-# -------------------------------------------------------------------
-# Build components
-# -------------------------------------------------------------------
+# -------------------- Components ------------------------
 def render_card(it):
     cat = it["category"]
     cat_slug = slugify(cat)
-    return f"""
-    <div class="card cat-{cat_slug}" data-id="{esc(it.get('id',''))}" data-cat="{esc(cat_slug)}">
-      <a class="card-block" href="{esc(it.get('link',''))}" target="_blank" rel="noopener">
-        <div class="card-title">{esc(it.get('title',''))}</div>
-        <div class="card-meta">{esc(it.get('source',''))} · {fmt_date(it.get('published') or it.get('fetched'))}
-          · <span class="badge cat-{cat_slug}">{esc(cat)}</span></div>
-        <div class="card-summary">{esc(it.get('summary','')[:250])}</div>
-      </a>
-      <button class="save" data-id="{esc(it.get('id',''))}" aria-label="Save">&#9734;</button>
-    </div>
-    """
+    return (
+        "<div class='card cat-{slug}' data-id='{id}' data-cat='{slug}'>"
+        "<a class='card-block' href='{link}' target='_blank' rel='noopener'>"
+        "<div class='card-title'>{title}</div>"
+        "<div class='card-meta'>{source} · {date} · <span class='badge cat-{slug}'>{cat}</span></div>"
+        "<div class='card-summary'>{summary}</div></a>"
+        "<button class='save' data-id='{id}'>&#9734;</button></div>"
+    ).format(
+        slug=esc(cat_slug),
+        id=esc(it.get("id", "")),
+        link=esc(it.get("link", "")),
+        title=esc(it.get("title", "")),
+        source=esc(it.get("source", "")),
+        date=fmt_date(it.get("published") or it.get("fetched")),
+        cat=esc(cat),
+        summary=esc((it.get("summary") or "")[:250]),
+    )
 
 def render_cards(arr): return "\n".join(render_card(it) for it in arr)
 
@@ -134,7 +124,9 @@ def render_alerts(alerts):
     if not alerts: return "<p>No current scam alerts.</p>"
     out = ["<ul class='alerts'>"]
     for a in alerts:
-        out.append(f"<li><a href='{esc(a.get('link',''))}' target='_blank'>{esc(a.get('title',''))}</a> <small>{fmt_date(a.get('published'))}</small></li>")
+        out.append("<li><a href='{0}' target='_blank'>{1}</a> <small>{2}</small></li>".format(
+            esc(a.get("link","")), esc(a.get("title","")), fmt_date(a.get("published"))
+        ))
     out.append("</ul>")
     return "\n".join(out)
 
@@ -145,91 +137,74 @@ def render_archive_links(items):
         if d: days[d]+=1
     out = ["<ul class='archives'>"]
     for d,n in sorted(days.items(), reverse=True):
-        out.append(f"<li>{d} <span class='muted'>({n} articles)</span></li>")
+        out.append("<li>{0} <span class='muted'>({1} articles)</span></li>".format(esc(d), n))
     out.append("</ul>")
     return "\n".join(out)
 
-# Build category filter chips
+# Category chips
 cat_counts = Counter(it["category"] for it in items)
 chips = ["<button class='chip active' data-cat='__all'>All <b>{}</b></button>".format(sum(cat_counts.values()))]
-for cat, n in sorted(cat_counts.items(), key=lambda kv:(-kv[1], kv[0].lower())):
-    chips.append(f"<button class='chip' data-cat='{esc(slugify(cat))}'>{esc(cat)} <b>{n}</b></button>")
+for cat,n in sorted(cat_counts.items(), key=lambda kv:(-kv[1], kv[0].lower())):
+    chips.append("<button class='chip' data-cat='{slug}'>{cat} <b>{n}</b></button>".format(
+        slug=esc(slugify(cat)), cat=esc(cat), n=n))
 chips_html = "\n".join(chips)
 
-# -------------------------------------------------------------------
-# Compose HTML
-# -------------------------------------------------------------------
-cards_html = render_cards(items)
-alerts_html = render_alerts(alerts)
-archives_html = render_archive_links(items)
-
-html = f"""<!doctype html>
+# -------------------- HTML Template ---------------------
+template = """<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Senior News Daily</title>
-  <link rel="stylesheet" href="styles.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Senior News Daily</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
 <header class="hero">
   <h1>Plan boldly. Retire confidently.</h1>
   <p class="subtitle">AI-powered daily insights for seniors — health, finance, leisure & scams.</p>
 </header>
-
 <main class="container">
   <section class="summary">
     <h2>Daily Summary</h2>
-    <p>{esc(summary)}</p>
-    <p class="muted">Last updated: {fmt_date(generated)}</p>
+    <p>{summary}</p>
+    <p class="muted">Last updated: {updated}</p>
   </section>
-
   <section class="filters">
-    <h2>Filter by Category</h2>
-    <div class="filterbar">{chips_html}</div>
+    <h2>Filter by Category</h2><div class="filterbar">{chips}</div>
   </section>
-
-  <section class="articles">
-    <h2>Latest Articles</h2>
-    <div id="cards">{cards_html}</div>
-  </section>
-
-  <section class="scam-alerts">
-    <h2>⚠️ Scam Alerts</h2>
-    {alerts_html}
-  </section>
-
-  <section class="archives">
-    <h2>Archives</h2>
-    {archives_html}
-  </section>
+  <section class="articles"><h2>Latest Articles</h2><div id="cards">{cards}</div></section>
+  <section class="scam-alerts"><h2>⚠️ Scam Alerts</h2>{alerts}</section>
+  <section class="archives"><h2>Archives</h2>{archives}</section>
 </main>
-
 <footer class="footer">
   <p>Venmo donations are welcome! <strong>@MikeHnastchenko</strong></p>
-  <p class="muted">© {datetime.date.today().year} Senior News Daily — All Rights Reserved</p>
+  <p class="muted">© {year} Senior News Daily — All Rights Reserved</p>
 </footer>
-
 <script>
 const cards=[...document.querySelectorAll('#cards .card')];
 const chips=[...document.querySelectorAll('.chip')];
-function applyFilter(slug){cards.forEach(c=>c.style.display=(slug==='__all'||c.dataset.cat===slug)?'':'none');
-chips.forEach(ch=>ch.classList.toggle('active',ch.dataset.cat===slug));}
-chips.forEach(ch=>ch.addEventListener('click',()=>{const s=ch.dataset.cat;localStorage.setItem('snd_cat',s);applyFilter(s);}));
+function applyFilter(slug){{cards.forEach(c=>c.style.display=(slug==='__all'||c.dataset.cat===slug)?'':'none');
+chips.forEach(ch=>ch.classList.toggle('active',ch.dataset.cat===slug));}}
+chips.forEach(ch=>ch.addEventListener('click',()=>{{const s=ch.dataset.cat;localStorage.setItem('snd_cat',s);applyFilter(s);}}));
 applyFilter(localStorage.getItem('snd_cat')||'__all');
-
-// save-for-later
-function getSaved(){try{return JSON.parse(localStorage.getItem('snd_saved')||'[]');}catch(e){return[]}}
-function setSaved(v){localStorage.setItem('snd_saved',JSON.stringify([...new Set(v)]));}
-function updateStars(){const cur=new Set(getSaved());document.querySelectorAll('.save').forEach(b=>{b.innerHTML=cur.has(b.dataset.id)?'★':'☆';});}
-document.addEventListener('click',e=>{if(e.target.classList.contains('save')){const id=e.target.dataset.id;let cur=new Set(getSaved());
-cur.has(id)?cur.delete(id):cur.add(id);setSaved([...cur]);updateStars();}});
+function getSaved(){{try{{return JSON.parse(localStorage.getItem('snd_saved')||'[]');}}catch(e){{return[]}}}}
+function setSaved(v){{localStorage.setItem('snd_saved',JSON.stringify([...new Set(v)]));}}
+function updateStars(){{const cur=new Set(getSaved());document.querySelectorAll('.save').forEach(b=>{{b.innerHTML=cur.has(b.dataset.id)?'★':'☆';}});}}
+document.addEventListener('click',e=>{{if(e.target.classList.contains('save')){{const id=e.target.dataset.id;
+let cur=new Set(getSaved());cur.has(id)?cur.delete(id):cur.add(id);setSaved([...cur]);updateStars();}}}});
 updateStars();
 </script>
-</body>
-</html>
+</body></html>
 """
 
+html = template.format(
+    summary=esc(summary),
+    updated=fmt_date(generated),
+    chips=chips_html,
+    cards=render_cards(items),
+    alerts=render_alerts(alerts),
+    archives=render_archive_links(items),
+    year=datetime.date.today().year,
+)
+
 (SITE / "index.html").write_text(html, encoding="utf-8")
-print(f"[site_builder] Built site/index.html with {len(items)} articles across {len(cat_counts)} categories.")
+print(f"[site_builder] Built site/index.html with {len(items)} articles and {len(cat_counts)} categories.")
