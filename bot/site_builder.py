@@ -236,20 +236,47 @@ updateStars();applyFilter(localStorage.getItem('snd_cat')||'__all');
 </script></body></html>"""
 
 # -------------------- Build -----------------------------
-archives_html = build_archive_pages(items)
-badge_html = next_update_badge()
+def build_archive_pages(items):
+    """Write site/archive/YYYY-MM-DD.html and return two lists:
+       - home_list: links prefixed with 'archive/' for homepage
+       - index_list: links with no prefix for /archive/index.html
+    """
+    by_day = defaultdict(list)
+    for it in items:
+        d = day_key(it)
+        if d:
+            by_day[d].append(it)
 
-home_html = (template
-    .replace("__SUMMARY__", esc(summary))
-    .replace("__UPDATED__", fmt_date(generated))
-    .replace("__BADGE__", badge_html)
-    .replace("__CHIPS__", chips_html)
-    .replace("__CARDS__", render_cards(items))
-    .replace("__ALERTS__", render_alerts(alerts))
-    .replace("__ARCHIVES__", archives_html)
-    .replace("__YEAR__", str(datetime.date.today().year))
-)
-(SITE / "index.html").write_text(home_html, encoding="utf-8")
+    # write per-day pages
+    for d, its in by_day.items():
+        body = f"""<!doctype html><meta charset='utf-8'>
+<link rel='stylesheet' href='../styles.css'>
+<div class='topnav'><div class='container'>
+  <a href='../index.html'>← Home</a>
+  <a href='./'>Archive</a>
+</div></div>
+<main class='container'>
+  <h1>Archive — {esc(d)}</h1>
+  <div id='cards'>{render_cards(its)}</div>
+</main>
+<footer class='footer'><p>Venmo: <strong>@MikeHnastchenko</strong></p></footer>"""
+        (ARCH / f"{d}.html").write_text(body, encoding="utf-8")
+
+    def list_html(prefix: str) -> str:
+        out = ["<ul class='archives'>"]
+        for d in sorted(by_day.keys(), reverse=True):
+            n = len(by_day[d])
+            out.append(
+                f"<li><a href='{prefix}{esc(d)}.html'>{esc(d)}</a> "
+                f"<span class='muted'>({n} articles)</span></li>"
+            )
+        out.append("</ul>")
+        return "\n".join(out)
+
+    home_list = list_html("archive/")  # used on /
+    index_list = list_html("")         # used on /archive/
+    return home_list, index_list
+
 
 # Saved Articles page (renders user's local saved set by reusing cards from index)
 saved_html = """<!doctype html><meta charset='utf-8'><title>Saved Articles — Senior News Daily</title>
