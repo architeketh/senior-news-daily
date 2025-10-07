@@ -222,32 +222,27 @@ template = """<!doctype html>
 <main class="container">
   <section class="summary">
     <h2>Daily Summary</h2>
-    <p>{summary}</p>
-    <p class="muted">Last updated: {updated}</p>
+    <p>__SUMMARY__</p>
+    <p class="muted">Last updated: __UPDATED__</p>
   </section>
   <section class="filters">
-    <h2>Filter by Category</h2><div class="filterbar">{chips}</div>
+    <h2>Filter by Category</h2><div class="filterbar">__CHIPS__</div>
   </section>
-  <section class="articles"><h2>Latest Articles</h2><div id="cards">{cards}</div></section>
-  <section class="scam-alerts"><h2>⚠️ Scam Alerts</h2>{alerts}</section>
-  <section class="archives"><h2>Archives</h2>{archives}</section>
+  <section class="articles"><h2>Latest Articles</h2><div id="cards">__CARDS__</div></section>
+  <section class="scam-alerts"><h2>⚠️ Scam Alerts</h2>__ALERTS__</section>
+  <section class="archives"><h2>Archives</h2>__ARCHIVES__</section>
 </main>
 <footer class="footer">
   <p>Venmo donations are welcome! <strong>@MikeHnastchenko</strong></p>
-  <p class="muted">© {year} Senior News Daily — All Rights Reserved</p>
+  <p class="muted">© __YEAR__ Senior News Daily — All Rights Reserved</p>
 </footer>
 <script>
-// category filtering + saved view
+// filtering + saved view (unchanged JS)
 const cards=[...document.querySelectorAll('#cards .card')];
 const chips=[...document.querySelectorAll('.chip')];
-
 function getSaved(){try{return JSON.parse(localStorage.getItem('snd_saved')||'[]');}catch(e){return[]}}
 function setSaved(v){localStorage.setItem('snd_saved',JSON.stringify([...new Set(v)]));}
-function updateStars(){
-  const cur=new Set(getSaved());
-  document.querySelectorAll('.save').forEach(b=>{b.innerHTML=cur.has(b.dataset.id)?'★':'☆';});
-}
-
+function updateStars(){const cur=new Set(getSaved());document.querySelectorAll('.save').forEach(b=>{b.innerHTML=cur.has(b.dataset.id)?'★':'☆';});}
 function applyFilter(slug){
   if(slug==='__saved'){
     const cur=new Set(getSaved());
@@ -259,53 +254,30 @@ function applyFilter(slug){
   localStorage.setItem('snd_cat',slug);
 }
 chips.forEach(ch=>ch.addEventListener('click',()=>applyFilter(ch.dataset.cat)));
-
 document.addEventListener('click',e=>{
   if(e.target.classList.contains('save')){
-    const id=e.target.dataset.id;
-    const cur=new Set(getSaved());
+    const id=e.target.dataset.id;const cur=new Set(getSaved());
     cur.has(id)?cur.delete(id):cur.add(id);
-    setSaved([...cur]);
-    updateStars();
+    setSaved([...cur]);updateStars();
   }
 });
-
 updateStars();
 applyFilter(localStorage.getItem('snd_cat')||'__all');
 </script>
 </body></html>
 """
 
-# -------------------- Build & Write ---------------------
-# 1) Build per-day archive pages and linked list
-archives_html = build_archive_pages(items)
-
-# 2) Compose homepage
-home_html = template.format(
-    summary=esc(summary),
-    updated=fmt_date(generated),
-    chips=chips_html,
-    cards=render_cards(items),
-    alerts=render_alerts(alerts),
-    archives=archives_html,
-    year=datetime.date.today().year,
+# Safely inject content
+home_html = (
+    template
+    .replace("__SUMMARY__", esc(summary))
+    .replace("__UPDATED__", fmt_date(generated))
+    .replace("__CHIPS__", chips_html)
+    .replace("__CARDS__", render_cards(items))
+    .replace("__ALERTS__", render_alerts(alerts))
+    .replace("__ARCHIVES__", build_archive_pages(items))
+    .replace("__YEAR__", str(datetime.date.today().year))
 )
 
 (SITE / "index.html").write_text(home_html, encoding="utf-8")
-
-# 3) Also write archive index page
-arch_index = """<!doctype html><meta charset="utf-8">
-<link rel="stylesheet" href="../styles.css">
-<div class="topnav"><div class="container">
-  <a href="../index.html">← Back to Home</a>
-  <div class="muted">Archive</div>
-</div></div>
-<main class="container">
-  <h1>Archive</h1>
-  {archives}
-</main>
-<footer class="footer"><p>Venmo donations: <strong>@MikeHnastchenko</strong></p></footer>
-""".format(archives=archives_html)
-(ARCH / "index.html").write_text(arch_index, encoding="utf-8")
-
-print(f"[site_builder] Built site/index.html + {len(list(ARCH.glob('*.html')))-1} archive day pages.")
+print(f"[site_builder] Built site/index.html and archive pages successfully.")
