@@ -13,7 +13,7 @@ OUT = DATA / "digest.json"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-TOPIC_BUCKETS = {
+CATEGORIES = {
     "Medicare & Health Policy": ["medicare", "medicaid", "drug", "rx", "cms", "price", "premium"],
     "Social Security & Benefits": ["social security", "ssa", "cola", "benefit", "pension", "ssi"],
     "Aging & Research": ["aging", "alzheim", "dementia", "nia", "falls", "longevity"],
@@ -32,7 +32,7 @@ def _is_today(dt_iso: str) -> bool:
 
 def _bucket(title: str, summary: str) -> str:
     t = (title + "\n" + summary).lower()
-    for b, keys in TOPIC_BUCKETS.items():
+    for b, keys in CATEGORIES.items():
         if any(k in t for k in keys):
             return b
     return "General"
@@ -40,7 +40,7 @@ def _bucket(title: str, summary: str) -> str:
 def _classical_summary(items: list[dict]) -> str:
     lines = []
     cats = defaultdict(int)
-    for it in items[:12]:
+    for it in items[:16]:
         cats[_bucket(it.get("title",""), it.get("summary",""))] += 1
     parts = [f"{c}: {n}" for c, n in sorted(cats.items(), key=lambda x: -x[1])]
     lines.append("Today’s senior news at a glance — " + "; ".join(parts) + ".")
@@ -75,6 +75,13 @@ def main():
     items = data.get("items", [])
     today_items = [it for it in items if _is_today(it.get("published") or it.get("fetched"))]
 
+    # Category tagging + counts
+    category_counts = defaultdict(int)
+    for it in items:
+        cat = _bucket(it.get("title",""), it.get("summary",""))
+        it["category"] = cat
+        category_counts[cat] += 1
+
     if OPENAI_API_KEY:
         try:
             import asyncio
@@ -85,19 +92,17 @@ def main():
     else:
         summary = _classical_summary(today_items or items)
 
-    # Extract simple scam alerts (today or week)
+    # Scam alerts (recent top 10 by appearance order)
     def is_scam(it):
         t = (it.get("title","") + " " + it.get("summary","")).lower()
         return any(k in t for k in SCAM_WORDS)
-
-    alerts = [it for it in items if is_scam(it)]
-    # keep recent 10
-    alerts = alerts[:10]
+    alerts = [it for it in items if is_scam(it)][:10]
 
     OUT.write_text(json.dumps({
         "generated": datetime.now(timezone.utc).isoformat(),
         "summary": summary,
-        "alerts": alerts
+        "alerts": alerts,
+        "category_counts": dict(sorted(category_counts.items(), key=lambda x: -x[1]))
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[summarize] Wrote digest → {OUT}")
 
