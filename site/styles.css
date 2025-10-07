@@ -1,68 +1,123 @@
-/* --- Category palette ---------------------------------------------------- */
-:root{
-  /* fallback neutrals already exist above */
-  --cat-medicare:           #2563eb;
-  --cat-social-security:    #059669;
-  --cat-finance-retirement: #0ea5e9;
-  --cat-golf-leisure:       #f59e0b;
-  --cat-travel:             #ef4444;
-  --cat-cooking-nutrition:  #e11d48;
-  --cat-caregiving-ltc:     #7c3aed;
-  --cat-aging-research:     #0891b2;
-  --cat-safety-scams:       #dc2626;
-  --cat-policy-legislation: #4b5563;
-  --cat-general:            #6b7280;
+/* ----------- Base layout ----------- */
+* { box-sizing: border-box; }
+body {
+  font-family: system-ui, sans-serif;
+  background: #f9fafb;
+  color: #111827;
+  margin: 0;
 }
+.container { width: min(1100px, 90%); margin: 0 auto; padding: 1rem 0 3rem; }
+h1, h2, h3 { margin: 0 0 .5rem; }
+.muted { color: #6b7280; font-size: .9em; }
 
-/* Utility to tint cards by category */
-.card{ position:relative; }
-.card::before{
+/* ----------- Hero banner ----------- */
+.hero {
+  text-align: center;
+  background: linear-gradient(135deg,#111827,#1e3a8a);
+  color: white;
+  padding: 3rem 1rem 2rem;
+}
+.hero h1 { font-size: 2.2rem; margin-bottom:.3rem; }
+.hero .subtitle { color:#cbd5e1; font-size:1.1rem; }
+
+/* ----------- Section spacing ----------- */
+section { margin-top: 2rem; }
+
+/* ----------- Cards grid ----------- */
+.articles #cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(300px,1fr));
+  gap: 1rem;
+}
+.card {
+  background:white;
+  border:1px solid #e5e7eb;
+  border-radius:16px;
+  box-shadow:0 2px 5px rgba(0,0,0,.04);
+  padding:1rem 1.25rem;
+  position:relative;
+  transition:.2s all;
+}
+.card:hover { transform:translateY(-2px); box-shadow:0 4px 10px rgba(0,0,0,.08); }
+.card::before {
   content:"";
-  position:absolute; left:0; top:0; bottom:0; width:6px; opacity:.85;
-  border-top-left-radius:14px; border-bottom-left-radius:14px;
+  position:absolute; left:0; top:0; bottom:0; width:6px;
+  border-radius:16px 0 0 16px;
+}
+.card-title { font-weight:700; margin-bottom:.2rem; }
+.card-meta { font-size:.9em; color:#4b5563; }
+.card-summary { margin-top:.4rem; color:#374151; font-size:.95em; line-height:1.4; }
+.save {
+  position:absolute; top:8px; right:10px;
+  background:none; border:none; font-size:1.4rem;
+  cursor:pointer; color:#9ca3af;
+}
+.save:hover { color:#111827; }
+
+/* ----------- Filter chips ----------- */
+.filterbar {
+  display:flex; flex-wrap:wrap; gap:.5rem;
+  margin-top:.5rem; margin-bottom:1rem;
+}
+.chip {
+  border:1px solid #d1d5db; border-radius:9999px;
+  padding:.4rem .9rem; cursor:pointer; font-weight:600;
+  background:#f3f4f6; color:#111;
+}
+.chip b { font-weight:700; }
+.chip.active { background:#111; color:#fff; }
+
+/* ----------- Scam & Archive ----------- */
+.alerts li, .archives li { margin:.4rem 0; }
+
+/* ----------- Footer ----------- */
+.footer {
+  text-align:center; background:#111827; color:#cbd5e1;
+  padding:2rem 1rem;
+}
+.footer a, .footer strong { color:#facc15; }
+
+/* ----------- Category palette ----------- */
+:root{
+  --cat-medicare:#2563eb;
+  --cat-social-security:#059669;
+  --cat-finance-retirement:#0ea5e9;
+  --cat-golf-leisure:#f59e0b;
+  --cat-travel:#ef4444;
+  --cat-cooking-nutrition:#e11d48;
+  --cat-caregiving-ltc:#7c3aed;
+  --cat-aging-research:#0891b2;
+  --cat-safety-scams:#dc2626;
+  --cat-policy-legislation:#4b5563;
+  --cat-general:#6b7280;
 }
 
-/* Map slug classes to colors */
-.card.cat-medicare{           border-color: color-mix(in srgb, var(--cat-medicare) 35%, #fff); }
-.card.cat-medicare::before{   background: var(--cat-medicare); }
-.badge.cat-medicare{          background: color-mix(in srgb, var(--cat-medicare) 18%, #fff); border-color: var(--cat-medicare); }
+/* Helper color mix for ribbons & badges */
+.card.cat-medicare::before{background:var(--cat-medicare);}
+.card.cat-social-security::before{background:var(--cat-social-security);}
+.card.cat-finance-retirement::before{background:var(--cat-finance-retirement);}
+.card.cat-golf-leisure::before{background:var(--cat-golf-leisure);}
+.card.cat-travel::before{background:var(--cat-travel);}
+.card.cat-cooking-nutrition::before{background:var(--cat-cooking-nutrition);}
+.card.cat-caregiving-ltc::before{background:var(--cat-caregiving-ltc);}
+.card.cat-aging-research::before{background:var(--cat-aging-research);}
+.card.cat-safety-scams::before{background:var(--cat-safety-scams);}
+.card.cat-policy-legislation::before{background:var(--cat-policy-legislation);}
+.card.cat-general::before{background:var(--cat-general);}
 
-.card.cat-social-security{         border-color: color-mix(in srgb, var(--cat-social-security) 35%, #fff); }
-.card.cat-social-security::before{ background: var(--cat-social-security); }
-.badge.cat-social-security{        background: color-mix(in srgb, var(--cat-social-security) 18%, #fff); border-color: var(--cat-social-security); }
-
-.card.cat-finance-retirement{         border-color: color-mix(in srgb, var(--cat-finance-retirement) 35%, #fff); }
-.card.cat-finance-retirement::before{ background: var(--cat-finance-retirement); }
-.badge.cat-finance-retirement{        background: color-mix(in srgb, var(--cat-finance-retirement) 18%, #fff); border-color: var(--cat-finance-retirement); }
-
-.card.cat-golf-leisure{         border-color: color-mix(in srgb, var(--cat-golf-leisure) 35%, #fff); }
-.card.cat-golf-leisure::before{ background: var(--cat-golf-leisure); }
-.badge.cat-golf-leisure{        background: color-mix(in srgb, var(--cat-golf-leisure) 18%, #fff); border-color: var(--cat-golf-leisure); }
-
-.card.cat-travel{         border-color: color-mix(in srgb, var(--cat-travel) 35%, #fff); }
-.card.cat-travel::before{ background: var(--cat-travel); }
-.badge.cat-travel{        background: color-mix(in srgb, var(--cat-travel) 18%, #fff); border-color: var(--cat-travel); }
-
-.card.cat-cooking-nutrition{         border-color: color-mix(in srgb, var(--cat-cooking-nutrition) 35%, #fff); }
-.card.cat-cooking-nutrition::before{ background: var(--cat-cooking-nutrition); }
-.badge.cat-cooking-nutrition{        background: color-mix(in srgb, var(--cat-cooking-nutrition) 18%, #fff); border-color: var(--cat-cooking-nutrition); }
-
-.card.cat-caregiving-ltc{         border-color: color-mix(in srgb, var(--cat-caregiving-ltc) 35%, #fff); }
-.card.cat-caregiving-ltc::before{ background: var(--cat-caregiving-ltc); }
-.badge.cat-caregiving-ltc{        background: color-mix(in srgb, var(--cat-caregiving-ltc) 18%, #fff); border-color: var(--cat-caregiving-ltc); }
-
-.card.cat-aging-research{         border-color: color-mix(in srgb, var(--cat-aging-research) 35%, #fff); }
-.card.cat-aging-research::before{ background: var(--cat-aging-research); }
-.badge.cat-aging-research{        background: color-mix(in srgb, var(--cat-aging-research) 18%, #fff); border-color: var(--cat-aging-research); }
-
-.card.cat-safety-scams{         border-color: color-mix(in srgb, var(--cat-safety-scams) 35%, #fff); }
-.card.cat-safety-scams::before{ background: var(--cat-safety-scams); }
-.badge.cat-safety-scams{        background: color-mix(in srgb, var(--cat-safety-scams) 18%, #fff); border-color: var(--cat-safety-scams); }
-
-.card.cat-policy-legislation{         border-color: color-mix(in srgb, var(--cat-policy-legislation) 35%, #fff); }
-.card.cat-policy-legislation::before{ background: var(--cat-policy-legislation); }
-.badge.cat-policy-legislation{        background: color-mix(in srgb, var(--cat-policy-legislation) 18%, #fff); border-color: var(--cat-policy-legislation); }
-
-.card.cat-general{         border-color: color-mix(in srgb, var(--cat-general) 35%, #fff); }
-.card.cat-general::before{ background: var(--cat-general); }
-.badge.cat-general{        background: color-mix(in srgb, var(--cat-general) 18%, #fff); border-color: var(--cat-general); }
+.badge{
+  display:inline-block; border:1px solid transparent;
+  border-radius:4px; padding:0 .4em;
+  font-size:.75rem; font-weight:600;
+}
+.badge.cat-medicare{background:#dbeafe; border-color:var(--cat-medicare);}
+.badge.cat-social-security{background:#d1fae5; border-color:var(--cat-social-security);}
+.badge.cat-finance-retirement{background:#cffafe; border-color:var(--cat-finance-retirement);}
+.badge.cat-golf-leisure{background:#fef3c7; border-color:var(--cat-golf-leisure);}
+.badge.cat-travel{background:#fee2e2; border-color:var(--cat-travel);}
+.badge.cat-cooking-nutrition{background:#ffe4e6; border-color:var(--cat-cooking-nutrition);}
+.badge.cat-caregiving-ltc{background:#ede9fe; border-color:var(--cat-caregiving-ltc);}
+.badge.cat-aging-research{background:#cffafe; border-color:var(--cat-aging-research);}
+.badge.cat-safety-scams{background:#fee2e2; border-color:var(--cat-safety-scams);}
+.badge.cat-policy-legislation{background:#e5e7eb; border-color:var(--cat-policy-legislation);}
+.badge.cat-general{background:#f3f4f6; border-color:var(--cat-general);}
