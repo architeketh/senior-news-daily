@@ -2,7 +2,6 @@
 from pathlib import Path
 import json
 from datetime import datetime, timezone, timedelta
-from string import Template
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -83,11 +82,11 @@ def build_index():
     summary_text = html_escape(DIGEST.get("summary",""))
     alerts_html = render_alerts(DIGEST.get("alerts", []))
 
-    hero_title = "Plan boldly. Retire confidently."  # requested hero
+    hero_title = "Plan boldly. Retire confidently."
     venmo_footer = "Venmo donations are welcome! @MikeHnastchenko"
+    updated = now.strftime("%Y-%m-%d %H:%M UTC")
 
-    # Use Template to avoid f-string brace issues
-    tmpl = Template("""<!doctype html>
+    template = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -98,7 +97,7 @@ def build_index():
 <body>
 <header class="site-header">
   <h1>Senior News Daily</h1>
-  <p class="tagline">$hero</p>
+  <p class="tagline">__HERO__</p>
   <p class="muted">Daily AI-generated summary on U.S. senior news.</p>
 </header>
 
@@ -112,33 +111,33 @@ def build_index():
 
 <section class="summary">
   <h2>Daily Summary</h2>
-  <pre>$summary</pre>
+  <pre>__SUMMARY__</pre>
 </section>
 
 <section class="scams">
   <h2>Scam Alerts</h2>
   <p class="muted">Recent reports affecting older adults. Always verify requests for money, benefits, or personal info.</p>
-  $alerts
+  __ALERTS__
 </section>
 
 <section id="list" class="grid" data-active="today">
   <div data-period="today" class="panel show">
-    $today_cards
+    __TODAY__
   </div>
   <div data-period="week" class="panel">
-    $week_cards
+    __WEEK__
   </div>
   <div data-period="month" class="panel">
-    $month_cards
+    __MONTH__
   </div>
   <div data-period="year" class="panel">
-    $year_cards
+    __YEAR__
   </div>
 </section>
 
 <footer class="site-footer">
-  <div>Updated $updated</div>
-  <div class="muted">$venmo</div>
+  <div>Updated __UPDATED__</div>
+  <div class="muted">__VENMO__</div>
 </footer>
 
 <script>
@@ -149,26 +148,24 @@ chips.forEach(ch => ch.addEventListener('click', () => {
   ch.classList.add('active');
   const f = ch.getAttribute('data-filter');
   panels.forEach(p => p.classList.remove('show'));
-  // Avoid backtick ${} template; use string concat to keep Python happy
   const sel = ".panel[data-period='" + f + "']";
   document.querySelector(sel).classList.add('show');
 }));
 </script>
 </body>
 </html>
-""")
-
-    html = tmpl.substitute(
-        hero=hero_title,
-        summary=summary_text,
-        alerts=alerts_html,
-        today_cards=render_cards(buckets["today"]),
-        week_cards=render_cards(buckets["week"]),
-        month_cards=render_cards(buckets["month"]),
-        year_cards=render_cards(buckets["year"]),
-        updated=now.strftime("%Y-%m-%d %H:%M UTC"),
-        venmo=venmo_footer,
-    )
+"""
+    html = (template
+            .replace("__HERO__", hero_title)
+            .replace("__SUMMARY__", summary_text)
+            .replace("__ALERTS__", alerts_html)
+            .replace("__TODAY__", render_cards(buckets["today"]))
+            .replace("__WEEK__", render_cards(buckets["week"]))
+            .replace("__MONTH__", render_cards(buckets["month"]))
+            .replace("__YEAR__", render_cards(buckets["year"]))
+            .replace("__UPDATED__", updated)
+            .replace("__VENMO__", venmo_footer)
+            )
     (SITE / "index.html").write_text(html, encoding="utf-8")
 
 def build_archive():
@@ -178,7 +175,6 @@ def build_archive():
         d = fmt_date(it.get("published") or it.get("fetched"))
         by_day.setdefault(d, []).append(it)
 
-    # Archive index
     links = []
     for day in sorted(by_day.keys(), reverse=True):
         links.append(f"<li><a href='{day}.html'>{day}</a> <span class='muted'>({len(by_day[day])})</span></li>")
@@ -186,7 +182,6 @@ def build_archive():
         "<!doctype html><meta charset='utf-8'><link rel=stylesheet href='../styles.css'>"
         + "<h1>Archive</h1><ul>" + "\n".join(links) + "</ul>", encoding="utf-8")
 
-    # Daily pages
     for day, its in by_day.items():
         (ARCH / f"{day}.html").write_text(
             "<!doctype html><meta charset='utf-8'><link rel=stylesheet href='../styles.css'>"
