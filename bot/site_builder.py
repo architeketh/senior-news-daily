@@ -12,6 +12,20 @@ import json, datetime, pathlib, re
 from collections import Counter, defaultdict
 from datetime import datetime as dt, timezone, timedelta
 
+import html  # add at top with other imports
+
+TAG_RE = re.compile(r"<[^>]+>")
+WS_RE  = re.compile(r"\s+")
+
+def plaintext(s: str) -> str:
+    """Strip HTML tags/entities and collapse whitespace."""
+    if not s:
+        return ""
+    s = html.unescape(s)           # &amp; → &
+    s = TAG_RE.sub(" ", s)         # drop tags
+    s = WS_RE.sub(" ", s).strip()  # tidy spaces/newlines
+    return s
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 SITE = ROOT / "site"
@@ -178,13 +192,16 @@ def weekly_trends(items: list[dict]) -> str:
 # ---------- components ----------
 def render_card(it):
     cat = it["category"]; slug = slugify(cat)
+    title = esc(plaintext(it.get('title','')))
+    summary_txt = esc(plaintext(it.get('summary',''))[:280])  # trim to ~280 chars
+
     return (
         f"<div class='card cat-{slug}' data-id='{esc(it.get('id',''))}' data-cat='{slug}'>"
         f"<a href='{esc(it.get('link',''))}' target='_blank' rel='noopener'>"
-        f"<div class='card-title'>{esc(it.get('title',''))}</div>"
+        f"<div class='card-title'>{title}</div>"
         f"<div class='card-meta'>{esc(it.get('source',''))} · {fmt_date(it.get('published') or it.get('fetched'))} · "
         f"<span class='badge cat-{slug}'>{esc(cat)}</span></div>"
-        f"<div class='card-summary'>{esc(it.get('summary','')[:250])}</div></a>"
+        f"<div class='card-summary'>{summary_txt}</div></a>"
         f"<button class='save' data-id='{esc(it.get('id',''))}' title='Save'>&#9734;</button></div>"
     )
 
