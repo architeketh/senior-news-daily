@@ -1,125 +1,78 @@
 # bot/summarize.py
 """
-Summarize + Categorize for Senior News Daily
---------------------------------------------
-- Reads data/items.json
-- Classifies articles into broader senior-friendly categories
-  (Medicare, Finance, Travel, Cooking, Exercise, etc.)
-- Generates a concise daily summary
-- Writes digest.json with summary, alerts, and counts
+Summarize articles, assign AI-based categories, and create digest.json.
 """
 
-import os, json, re
-from pathlib import Path
-from collections import defaultdict, Counter
-from datetime import datetime, timezone
-from dateutil import parser as dtp
-from urllib.parse import urlparse
+import json, re, pathlib, datetime
+from collections import Counter
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
+DATA.mkdir(exist_ok=True)
+
 ITEMS_PATH = DATA / "items.json"
 DIGEST_PATH = DATA / "digest.json"
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+def load_items():
+    if ITEMS_PATH.exists():
+        with open(ITEMS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("items", [])
+    return []
 
-# ---------------- Category Rules ----------------
-CATEGORY_RULES = [
-    ("Safety & Scams", [r"scam", r"fraud", r"phish", r"identity theft", r"robocall", r"spoof", r"elder abuse"]),
-    ("Social Security", [r"social security", r"ssa", r"cola", r"ssdi", r"ssi"]),
-    ("Medicare", [r"medicare", r"part\s*[abcd]", r"medigap", r"cms", r"prescription"]),
-    ("Finance & Retirement", [r"401k", r"ira", r"pension", r"tax", r"invest", r"annuit", r"money", r"savings?"]),
-    ("Travel", [r"travel", r"trip", r"vacation", r"cruise", r"hotel", r"destination", r"flight"]),
-    ("Golf & Leisure", [r"golf", r"leisure", r"pickleball", r"hobby", r"recreation"]),
-    ("Exercise & Fitness", [r"exercise", r"fitness", r"walking", r"workout", r"yoga", r"stretch", r"activity"]),
-    ("Cooking & Nutrition", [r"cook", r"recipe", r"nutrition", r"meal", r"diet", r"food", r"healthy eating"]),
-    ("Caregiving & LTC", [r"caregiver", r"long[-\s]?term care", r"nursing home", r"home health"]),
-    ("Aging Research", [r"aging", r"longevity", r"alzheim", r"dementia", r"nih", r"nia", r"clinical trial"]),
-    ("Policy & Legislation", [r"law", r"bill", r"regulation", r"legislation", r"congress"]),
-]
-
-DOMAIN_HINTS = {
-    # Lifestyle & Food
-    "foodnetwork.com": "Cooking & Nutrition",
-    "allrecipes.com": "Cooking & Nutrition",
-    "eatingwell.com": "Cooking & Nutrition",
-    "bonappetit.com": "Cooking & Nutrition",
-    # Travel
-    "travelandleisure.com": "Travel",
-    "lonelyplanet.com": "Travel",
-    "usatoday.com": "Travel",
-    "nytimes.com": "Travel",
-    # Exercise & Leisure
-    "aarp.org/health/fitness": "Exercise & Fitness",
-    "menshealth.com": "Exercise & Fitness",
-    "verywellfit.com": "Exercise & Fitness",
-    # Finance
-    "nerdwallet.com": "Finance & Retirement",
-    "cnbc.com": "Finance & Retirement",
-    "kiplinger.com": "Finance & Retirement",
-    # Senior Policy
-    "kff.org": "Medicare",
-    "kffhealthnews.org": "Medicare",
-    "ssa.gov": "Social Security",
-    "cms.gov": "Medicare",
-    "acl.gov": "Caregiving & LTC",
-    "nia.nih.gov": "Aging Research",
-    "ftc.gov": "Safety & Scams",
-    "justice.gov": "Safety & Scams",
-    "hhs.gov": "Policy & Legislation",
-}
-
-SCAM_WORDS = ["scam", "fraud", "phishing", "robocall", "spoof", "identity theft", "elder abuse"]
-
-# ---------------- Helpers ----------------
-def _strong_category(title, summary, source, link):
-    text = " ".join([title or "", summary or "", source or ""]).lower()
-    for cat, patterns in CATEGORY_RULES:
-        if any(re.search(p, text) for p in patterns):
-            return cat
-    try:
-        host = (urlparse(link or "").hostname or "").lower().lstrip("www.")
-        if host in DOMAIN_HINTS:
-            return DOMAIN_HINTS[host]
-    except Exception:
-        pass
+def assign_category(text: str, source: str = "") -> str:
+    """Classify article text heuristically into a major category."""
+    s = text.lower() + " " + source.lower()
+    if any(k in s for k in ["golf", "leisure", "hobby"]):
+        return "Golf & Leisure"
+    if any(k in s for k in ["travel", "destination", "trip", "vacation"]):
+        return "Travel"
+    if any(k in s for k in ["cook", "recipe", "food", "nutrition", "diet"]):
+        return "Cooking & Nutrition"
+    if any(k in s for k in ["exercise", "fitness", "walk", "workout", "yoga"]):
+        return "Exercise & Fitness"
+    if any(k in s for k in ["social security", "ssa", "benefits"]):
+        return "Social Security"
+    if any(k in s for k in ["retire", "pension", "money", "finance", "investment", "401k"]):
+        return "Finance & Retirement"
+    if any(k in s for k in ["medicare", "health", "coverage", "plan b", "prescription"]):
+        return "Medicare"
+    if any(k in s for k in ["caregiver", "assisted living", "long-term care"]):
+        return "Caregiving & LTC"
+    if any(k in s for k in ["fraud", "scam", "phishing", "spam", "robocall"]):
+        return "Safety & Scams"
+    if any(k in s for k in ["aging", "research", "longevity", "alzheim", "dementia"]):
+        return "Aging Research"
+    if any(k in s for k in ["policy", "bill", "senate", "law", "regulation"]):
+        return "Policy & Legislation"
     return "General"
 
-def _scam_alerts(items):
-    return [it for it in items if any(k in (it.get("title","")+it.get("summary","")).lower() for k in SCAM_WORDS)][:10]
-
-def _summary_fallback(items):
-    cats = Counter(_strong_category(it.get("title",""), it.get("summary",""), it.get("source",""), it.get("link","")) for it in items)
-    parts = [f"{c}: {n}" for c,n in cats.most_common(6)]
-    lines = ["Today’s senior news highlights — " + "; ".join(parts) + "."]
-    for it in items[:5]:
-        lines.append(f"- {it.get('title','')} ({it.get('source','')})")
-    return "\n".join(lines)
-
-# ---------------- Main ----------------
-def main():
-    blob = json.loads(ITEMS_PATH.read_text()) if ITEMS_PATH.exists() else {"items":[]}
-    items = blob.get("items", [])
-
-    cat_counts = defaultdict(int)
+def summarize_items(items):
+    """Generate digest summary text + alerts list."""
+    alerts = [it for it in items if "scam" in it.get("title", "").lower()]
+    counts = Counter(assign_category(it.get("title","")+" "+it.get("summary",""), it.get("source","")) for it in items)
+    top3 = counts.most_common(3)
+    summary = "Today's highlights: " + ", ".join([f"{c} ({n})" for c, n in top3]) if top3 else "No major updates today."
     for it in items:
-        bucket = _strong_category(it.get("title",""), it.get("summary",""), it.get("source",""), it.get("link",""))
-        it["category"] = bucket
-        cat_counts[bucket] += 1
+        it["category"] = assign_category(it.get("title", "") + " " + it.get("summary", ""), it.get("source", ""))
+    return summary, alerts
 
-    summary = _summary_fallback(items)
-    alerts = _scam_alerts(items)
-
-    DIGEST_PATH.write_text(json.dumps({
-        "generated": datetime.now(timezone.utc).isoformat(),
+def main():
+    items = load_items()
+    if not items:
+        print("[summarize] No items found.")
+        return
+    summary, alerts = summarize_items(items)
+    digest = {
+        "generated": datetime.datetime.utcnow().isoformat(),
         "summary": summary,
         "alerts": alerts,
-        "category_counts": dict(sorted(cat_counts.items(), key=lambda x: -x[1]))
-    }, indent=2))
-
-    ITEMS_PATH.write_text(json.dumps({"items": items}, indent=2))
-    print(f"[summarize] Categorized {len(items)} items → {len(cat_counts)} categories")
+    }
+    with open(DIGEST_PATH, "w", encoding="utf-8") as f:
+        json.dump(digest, f, indent=2)
+    with open(ITEMS_PATH, "w", encoding="utf-8") as f:
+        json.dump({"items": items}, f, indent=2)
+    print(f"[summarize] Digest created ({len(items)} items, {len(alerts)} alerts)")
 
 if __name__ == "__main__":
     main()
