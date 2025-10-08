@@ -1,7 +1,7 @@
 # bot/site_builder.py
 """
-Senior News Daily — Clean Site Builder (Final)
-----------------------------------------------
+Senior News Daily — Clean Site Builder
+--------------------------------------
 Builds the static site for daily senior-focused AI summaries.
 Generates:
 - site/index.html
@@ -12,11 +12,11 @@ Generates:
 
 Features:
 - Hero banner ("Plan boldly. Retire confidently.")
+- "Update Now" button (opens GitHub Actions page)
 - Category chips and color-coded cards
 - Scam Alerts section (with AARP Scam Map link)
 - Separate Scam Resources page
 - Archives, Saved Articles, and auto CSS build
-- Auto badge showing next update (12-hour cycle)
 """
 
 import json, datetime, pathlib, re
@@ -76,6 +76,8 @@ a{color:inherit;text-decoration:none}
 .topnav{background:#1118270d;border-bottom:1px solid #e5e7eb}
 .topnav .container{display:flex;gap:1rem;align-items:center;justify-content:space-between;padding:0.6rem 0;}
 .topnav a{font-weight:700;text-decoration:none}
+.update-btn{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:.6rem 1rem;font-weight:600;cursor:pointer;}
+.update-btn:hover{background:#1e40af;}
 section{margin-top:2rem}
 .articles #cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem}
 .card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 2px 5px rgba(0,0,0,.04);
@@ -150,7 +152,126 @@ def render_alerts(alerts):
     out.append("</ul>")
     return "\n".join(out)
 
-# Build archives, scams page, main, etc. (same as previous version)
-# [Truncated for brevity — identical except the Update Now button removed]
+def build_archive_pages(items):
+    by_day = defaultdict(list)
+    for it in items:
+        d = day_key(it)
+        if d: by_day[d].append(it)
 
-print(f"[site_builder] ✅ Built site with {len(items)} items.")
+    for d, its in by_day.items():
+        body = f"""<!doctype html><meta charset='utf-8'>
+<link rel='stylesheet' href='../styles.css'>
+<div class='topnav'><div class='container'>
+<a href='../index.html'>← Home</a><a href='./'>Archive</a></div></div>
+<main class='container'><h1>Archive — {esc(d)}</h1><div id='cards'>{render_cards(its)}</div></main>
+<footer class='footer'><p>Venmo: <strong>@MikeHnastchenko</strong></p></footer>"""
+        (ARCH / f"{d}.html").write_text(body, encoding="utf-8")
+
+    def list_html(prefix): return "\n".join(
+        f"<li><a href='{prefix}{esc(d)}.html'>{esc(d)}</a> "
+        f"<span class='muted'>({len(v)} articles)</span></li>" for d,v in sorted(by_day.items(), reverse=True)
+    )
+
+    return "<ul class='archives'>" + list_html("archive/") + "</ul>", "<ul class='archives'>" + list_html("") + "</ul>"
+
+def build_scams_page():
+    html = """<!doctype html><meta charset="utf-8"><title>Scam Resources — Senior News Daily</title>
+<link rel="stylesheet" href="styles.css">
+<div class="topnav"><div class="container"><a href="index.html">← Home</a><div class="muted">Scam Resources</div></div></div>
+<main class="container">
+<h1>Scam Resources for Older Adults</h1>
+<ul class='alerts'>
+<li><a href='https://reportfraud.ftc.gov/' target='_blank'>FTC: ReportFraud.ftc.gov</a></li>
+<li><a href='https://www.ic3.gov/' target='_blank'>FBI Internet Crime Complaint Center</a></li>
+<li><a href='https://oig.ssa.gov/report/' target='_blank'>SSA Office of Inspector General</a></li>
+<li><a href='https://www.medicare.gov/fraud' target='_blank'>Medicare: Preventing Fraud</a></li>
+<li><a href='https://www.aarp.org/money/scams-fraud/tracking-map/' target='_blank'>AARP Scam Tracking Map</a></li>
+</ul>
+</main>
+<footer class='footer'><p>Venmo: <strong>@MikeHnastchenko</strong></p></footer>"""
+    (SITE / "scams.html").write_text(html, encoding="utf-8")
+
+# ---------------------- Build ----------------------
+archives_home, archives_index = build_archive_pages(items)
+build_scams_page()
+badge_html = next_update_badge()
+cat_counts = Counter(it["category"] for it in items)
+
+chips_html = "\n".join(
+    ["<button class='chip active' data-cat='__all'>All <b>{}</b></button>".format(sum(cat_counts.values())),
+     "<button class='chip' data-cat='__saved'>Saved <b>★</b></button>"] +
+    [f"<button class='chip' data-cat='{slugify(c)}'>{esc(c)} <b>{n}</b></button>" for c,n in cat_counts.items()]
+)
+
+template = """<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Senior News Daily</title><link rel="stylesheet" href="styles.css"></head>
+<body>
+<header class="hero">
+<h1>Plan boldly. Retire confidently.</h1>
+<p class="subtitle">AI-powered daily insights for seniors — health, finance, leisure & scams.</p>
+<p><button id="updateNow" class="update-btn">🔄 Update Now</button></p>
+</header>
+<div class="topnav"><div class="container">
+<a href="index.html">Home</a><a href="saved.html">Saved</a><a href="scams.html">Scam Resources</a><a href="archive/">Archive</a>
+</div></div>
+<main class="container">
+<section class="summary"><h2>Daily Summary</h2><p>__SUMMARY__</p>
+<p class="muted">Last updated: __UPDATED__ __BADGE__</p></section>
+<section class="filters"><h2>Filter by Category</h2><div class="filterbar">__CHIPS__</div></section>
+<section class="articles"><h2>Latest Articles</h2><div id="cards">__CARDS__</div></section>
+<section class="scam-alerts"><h2>⚠️ Scam Alerts</h2>__ALERTS__</section>
+<section class="archives"><h2>Archives</h2>__ARCHIVES__</section></main>
+<footer class="footer"><p>Venmo: <strong>@MikeHnastchenko</strong></p>
+<p class="muted">© __YEAR__ Senior News Daily — All Rights Reserved</p></footer>
+<script>
+const cards=[...document.querySelectorAll('#cards .card')];
+const chips=[...document.querySelectorAll('.chip')];
+function getSaved(){try{return JSON.parse(localStorage.getItem('snd_saved')||'[]');}catch(e){return[]}}
+function setSaved(v){localStorage.setItem('snd_saved',JSON.stringify([...new Set(v)]));}
+function updateStars(){const cur=new Set(getSaved());document.querySelectorAll('.save').forEach(b=>b.innerHTML=cur.has(b.dataset.id)?'★':'☆');}
+function applyFilter(slug){if(slug==='__saved'){const cur=new Set(getSaved());cards.forEach(c=>c.style.display=cur.has(c.dataset.id)?'':'none');}
+else{cards.forEach(c=>c.style.display=(slug==='__all'||c.dataset.cat===slug)?'':'none');}
+chips.forEach(ch=>ch.classList.toggle('active',ch.dataset.cat===slug));localStorage.setItem('snd_cat',slug);}
+chips.forEach(ch=>ch.addEventListener('click',()=>applyFilter(ch.dataset.cat)));
+document.addEventListener('click',e=>{if(e.target.classList.contains('save')){const id=e.target.dataset.id;const cur=new Set(getSaved());cur.has(id)?cur.delete(id):cur.add(id);setSaved([...cur]);updateStars();}});
+updateStars();applyFilter(localStorage.getItem('snd_cat')||'__all');
+document.getElementById("updateNow")?.addEventListener("click",()=>{window.open("https://github.com/architeketh/senior-news-daily/actions/workflows/pages.yml","_blank");});
+</script></body></html>"""
+
+home_html = (template
+    .replace("__SUMMARY__", esc(summary))
+    .replace("__UPDATED__", fmt_date(generated))
+    .replace("__BADGE__", badge_html)
+    .replace("__CHIPS__", chips_html)
+    .replace("__CARDS__", render_cards(items))
+    .replace("__ALERTS__", render_alerts(alerts))
+    .replace("__ARCHIVES__", archives_home)
+    .replace("__YEAR__", str(datetime.date.today().year))
+)
+(SITE / "index.html").write_text(home_html, encoding="utf-8")
+
+# Archive index
+arch_index_html = f"""<!doctype html><meta charset='utf-8'>
+<link rel='stylesheet' href='../styles.css'>
+<div class='topnav'><div class='container'><a href='../index.html'>← Home</a><div class='muted'>Archive</div></div></div>
+<main class='container'><h1>Archive</h1>{archives_index}</main>
+<footer class='footer'><p>Venmo: <strong>@MikeHnastchenko</strong></p></footer>"""
+(ARCH / "index.html").write_text(arch_index_html, encoding="utf-8")
+
+# Saved page
+saved_html = """<!doctype html><meta charset='utf-8'><title>Saved Articles — Senior News Daily</title>
+<link rel='stylesheet' href='styles.css'>
+<div class='topnav'><div class='container'><a href='index.html'>← Home</a><div class='muted'>Saved Articles</div></div></div>
+<main class='container'><h1>Saved Articles</h1><div id='savedCards'><p class='muted'>Loading your saved items…</p></div></main>
+<footer class='footer'><p>Venmo: <strong>@MikeHnastchenko</strong></p></footer>
+<script>
+const savedIds=new Set(JSON.parse(localStorage.getItem('snd_saved')||'[]'));
+fetch('index.html').then(r=>r.text()).then(t=>{const doc=new DOMParser().parseFromString(t,'text/html');
+const cards=[...doc.querySelectorAll('.card')].filter(c=>savedIds.has(c.dataset.id));
+document.querySelector('#savedCards').innerHTML=cards.length?cards.map(c=>c.outerHTML).join(''):'<p>No saved articles yet.</p>';});
+</script>"""
+(SITE / "saved.html").write_text(saved_html, encoding="utf-8")
+
+print(f"[site_builder] ✅ Built site with {len(items)} items across {len(cat_counts)} categories.")
