@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI in Architecture — Daily</title>
+  <meta name="color-scheme" content="light only" />
+  <link rel="preload" href="assets/styles.css" as="style" />
+  <link rel="stylesheet" href="assets/styles.css" />
+  <link rel="icon" href="assets/favicon.svg" />
+</head>
+<body>
+  <!-- Top Bar / Nav (matches SND layout) -->
+  <header class="topbar">
+    <div class="container">
+      <div class="brand">AI in Architecture</div>
+      <nav class="nav">
+        <a class="nav-link active" href="./index.html">Home</a>
+        <a class="nav-link" href="./saved.html">Saved</a>
+        <a class="nav-link" href="./archive.html">Archive</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Hero / Summary -->
+    <section class="section">
+      <h1 class="h1">Daily Summary</h1>
+      <p class="muted" id="summaryLine">Today’s highlights by category — …</p>
+      <p class="muted small" id="updatedLine">Last updated: <span id="lastUpdated">—</span></p>
+    </section>
+
+    <!-- Category Chips (auto-filled by app.js) -->
+    <section class="section">
+      <h2 class="h2">Filter by Category</h2>
+      <div id="chips" class="chips"></div>
+    </section>
+
+    <!-- Chart -->
+    <section class="section">
+      <canvas id="categoryChart" height="260"></canvas>
+    </section>
+
+    <!-- Latest Articles (cards) -->
+    <section class="section">
+      <h2 class="h2">Latest Articles</h2>
+
+      <!-- Example cards.
+           If your builder already prints items, keep its loop but ensure it uses this markup.
+           The JS will enhance/scan these automatically. Duplicate the .card block per article. -->
+      <div id="cards" class="cards">
+        <!-- TEMPLATE CARD (copy per article) -->
+        <!-- data-category is critical; data-source/date help summary lines. data-saved optional -->
+        <!-- Replace # with actual link, title, source, date, and optional thumbnail -->
+        <!-- Remove this example once your builder populates real cards -->
+        <article class="card" data-category="Generative Design" data-date="2025-10-08" data-source="AEC Magazine">
+          <button class="save" aria-label="Save this article" title="Save">★</button>
+          <a class="thumb" href="#" target="_blank" rel="noopener">
+            <img src="assets/placeholder.jpg" alt="" loading="lazy">
+          </a>
+          <div class="body">
+            <a class="title" href="#" target="_blank" rel="noopener">
+              Parametric to Generative: New AI workflows in facade design
+            </a>
+            <div class="meta">
+              <span class="badge">Generative Design</span>
+              <span class="dot">•</span>
+              <span class="source">AEC Magazine</span>
+              <span class="dot">•</span>
+              <time datetime="2025-10-08">Oct 08, 2025</time>
+            </div>
+            <p class="desc">How firms blend Grasshopper, Revit and diffusion models for early-stage options.</p>
+          </div>
+        </article>
+        <!-- /TEMPLATE -->
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container"><span class="muted small">Built for daily AI-in-Architecture updates.</span></div>
+  </footer>
+
+  <!-- Chart.js (vanilla CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
