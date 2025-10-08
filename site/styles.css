@@ -1,123 +1,52 @@
-/* ----------- Base layout ----------- */
-* { box-sizing: border-box; }
-body {
-  font-family: system-ui, sans-serif;
-  background: #f9fafb;
-  color: #111827;
-  margin: 0;
-}
-.container { width: min(1100px, 90%); margin: 0 auto; padding: 1rem 0 3rem; }
-h1, h2, h3 { margin: 0 0 .5rem; }
-.muted { color: #6b7280; font-size: .9em; }
-
-/* ----------- Hero banner ----------- */
-.hero {
-  text-align: center;
-  background: linear-gradient(135deg,#111827,#1e3a8a);
-  color: white;
-  padding: 3rem 1rem 2rem;
-}
-.hero h1 { font-size: 2.2rem; margin-bottom:.3rem; }
-.hero .subtitle { color:#cbd5e1; font-size:1.1rem; }
-
-/* ----------- Section spacing ----------- */
-section { margin-top: 2rem; }
-
-/* ----------- Cards grid ----------- */
-.articles #cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit,minmax(300px,1fr));
-  gap: 1rem;
-}
-.card {
-  background:white;
-  border:1px solid #e5e7eb;
-  border-radius:16px;
-  box-shadow:0 2px 5px rgba(0,0,0,.04);
-  padding:1rem 1.25rem;
-  position:relative;
-  transition:.2s all;
-}
-.card:hover { transform:translateY(-2px); box-shadow:0 4px 10px rgba(0,0,0,.08); }
-.card::before {
-  content:"";
-  position:absolute; left:0; top:0; bottom:0; width:6px;
-  border-radius:16px 0 0 16px;
-}
-.card-title { font-weight:700; margin-bottom:.2rem; }
-.card-meta { font-size:.9em; color:#4b5563; }
-.card-summary { margin-top:.4rem; color:#374151; font-size:.95em; line-height:1.4; }
-.save {
-  position:absolute; top:8px; right:10px;
-  background:none; border:none; font-size:1.4rem;
-  cursor:pointer; color:#9ca3af;
-}
-.save:hover { color:#111827; }
-
-/* ----------- Filter chips ----------- */
-.filterbar {
-  display:flex; flex-wrap:wrap; gap:.5rem;
-  margin-top:.5rem; margin-bottom:1rem;
-}
-.chip {
-  border:1px solid #d1d5db; border-radius:9999px;
-  padding:.4rem .9rem; cursor:pointer; font-weight:600;
-  background:#f3f4f6; color:#111;
-}
-.chip b { font-weight:700; }
-.chip.active { background:#111; color:#fff; }
-
-/* ----------- Scam & Archive ----------- */
-.alerts li, .archives li { margin:.4rem 0; }
-
-/* ----------- Footer ----------- */
-.footer {
-  text-align:center; background:#111827; color:#cbd5e1;
-  padding:2rem 1rem;
-}
-.footer a, .footer strong { color:#facc15; }
-
-/* ----------- Category palette ----------- */
 :root{
-  --cat-medicare:#2563eb;
-  --cat-social-security:#059669;
-  --cat-finance-retirement:#0ea5e9;
-  --cat-golf-leisure:#f59e0b;
-  --cat-travel:#ef4444;
-  --cat-cooking-nutrition:#e11d48;
-  --cat-caregiving-ltc:#7c3aed;
-  --cat-aging-research:#0891b2;
-  --cat-safety-scams:#dc2626;
-  --cat-policy-legislation:#4b5563;
-  --cat-general:#6b7280;
+  --bg:#fff; --ink:#111; --muted:#666; --line:#e9e9e9; --chip:#f3f4f6;
+  --brand:#0f172a; --accent:#111; --card:#fff; --shadow:0 1px 2px rgba(0,0,0,.06);
+  --badge:#111; --badge-ink:#fff;
 }
 
-/* Helper color mix for ribbons & badges */
-.card.cat-medicare::before{background:var(--cat-medicare);}
-.card.cat-social-security::before{background:var(--cat-social-security);}
-.card.cat-finance-retirement::before{background:var(--cat-finance-retirement);}
-.card.cat-golf-leisure::before{background:var(--cat-golf-leisure);}
-.card.cat-travel::before{background:var(--cat-travel);}
-.card.cat-cooking-nutrition::before{background:var(--cat-cooking-nutrition);}
-.card.cat-caregiving-ltc::before{background:var(--cat-caregiving-ltc);}
-.card.cat-aging-research::before{background:var(--cat-aging-research);}
-.card.cat-safety-scams::before{background:var(--cat-safety-scams);}
-.card.cat-policy-legislation::before{background:var(--cat-policy-legislation);}
-.card.cat-general::before{background:var(--cat-general);}
+*{box-sizing:border-box} html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+img{max-width:100%;display:block}
 
-.badge{
-  display:inline-block; border:1px solid transparent;
-  border-radius:4px; padding:0 .4em;
-  font-size:.75rem; font-weight:600;
+.container{max-width:1120px;margin:0 auto;padding:16px}
+.section{margin:28px 0}
+.h1{font-size:28px;margin:0 0 6px}
+.h2{font-size:20px;margin:0 0 10px}
+.small{font-size:12px}
+.muted{color:var(--muted)}
+.badge{display:inline-block;background:var(--badge);color:var(--badge-ink);border-radius:999px;padding:2px 8px;font-size:12px;line-height:18px}
+.dot{color:#bbb;margin:0 6px}
+
+/* Topbar matches SND vibe */
+.topbar{border-bottom:1px solid var(--line);background:#fafafa}
+.topbar .container{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{font-weight:700}
+.nav{display:flex;gap:12px;flex-wrap:wrap}
+.nav-link{color:var(--ink);text-decoration:none;padding:6px 8px;border-radius:8px}
+.nav-link:hover,.nav-link.active{background:var(--chip)}
+
+/* Chips row */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:var(--chip);border:1px solid var(--line);padding:6px 10px;border-radius:999px;font-size:14px;cursor:pointer}
+.chip.active{background:#111;color:#fff;border-color:#111}
+
+/* Cards grid */
+.cards{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+.card{
+  grid-column:span 12;
+  display:grid;grid-template-columns:120px 1fr;gap:12px;
+  background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;box-shadow:var(--shadow);position:relative}
+.card .thumb{display:block;width:120px;height:120px;border-radius:10px;overflow:hidden}
+.card .thumb img{width:100%;height:100%;object-fit:cover}
+.card .body{display:flex;flex-direction:column;gap:6px}
+.card .title{font-weight:700;color:var(--ink);text-decoration:none}
+.card .title:hover{text-decoration:underline}
+.card .desc{margin:0;color:#333}
+.save{
+  position:absolute;top:8px;right:10px;border:0;background:transparent;font-size:18px;cursor:pointer;opacity:.5
 }
-.badge.cat-medicare{background:#dbeafe; border-color:var(--cat-medicare);}
-.badge.cat-social-security{background:#d1fae5; border-color:var(--cat-social-security);}
-.badge.cat-finance-retirement{background:#cffafe; border-color:var(--cat-finance-retirement);}
-.badge.cat-golf-leisure{background:#fef3c7; border-color:var(--cat-golf-leisure);}
-.badge.cat-travel{background:#fee2e2; border-color:var(--cat-travel);}
-.badge.cat-cooking-nutrition{background:#ffe4e6; border-color:var(--cat-cooking-nutrition);}
-.badge.cat-caregiving-ltc{background:#ede9fe; border-color:var(--cat-caregiving-ltc);}
-.badge.cat-aging-research{background:#cffafe; border-color:var(--cat-aging-research);}
-.badge.cat-safety-scams{background:#fee2e2; border-color:var(--cat-safety-scams);}
-.badge.cat-policy-legislation{background:#e5e7eb; border-color:var(--cat-policy-legislation);}
-.badge.cat-general{background:#f3f4f6; border-color:var(--cat-general);}
+.save.active{opacity:1}
+@media (min-width:680px){ .card{grid-column:span 6} }
+@media (min-width:980px){ .card{grid-column:span 4} }
+
+/* Canvas spacing tweak (tight like SND) */
+.section canvas{display:block;width:100%;max-width:820px;margin:6px 0}
