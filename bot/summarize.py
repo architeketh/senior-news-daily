@@ -1,11 +1,12 @@
 # bot/summarize.py
 """
-Summarize + Categorize
+Summarize + Categorize for Senior News Daily
+--------------------------------------------
 - Reads data/items.json
-- Assigns robust categories (domain hints + strong regex rules)
-- (Optional) Uses OpenAI to propose labels, but final bucket is always canonical
-- Writes categories back to items.json
-- Writes data/digest.json with summary paragraph, scam alerts, and category counts
+- Classifies articles into broader senior-friendly categories
+  (Medicare, Finance, Travel, Cooking, Exercise, etc.)
+- Generates a concise daily summary
+- Writes digest.json with summary, alerts, and counts
 """
 
 import os, json, re
@@ -20,230 +21,105 @@ DATA = ROOT / "data"
 ITEMS_PATH = DATA / "items.json"
 DIGEST_PATH = DATA / "digest.json"
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-# ---------------- Canonical category rules (priority order) ----------------
+# ---------------- Category Rules ----------------
 CATEGORY_RULES = [
-    ("Safety & Scams", [
-        r"\b(scams?|fraud|phish(?:ing)?|robocalls?|spoof(?:ing)?|identity theft|elder abuse|smish(?:ing)?|vish(?:ing)?)\b",
-    ]),
-    ("Social Security", [
-        r"\bsocial security\b", r"\bssa\b", r"\bssdi\b", r"\bssi\b", r"\bcola\b",
-        r"\b(retire(?:ment)?|survivor|disability)\s+benefit(s)?\b",
-        r"\brequired minimum distribution(s)?\b", r"\brmds?\b",
-    ]),
-    ("Medicare", [
-        r"\bmedicare\b", r"\bmedicare advantage\b", r"\bpart\s*[abcd]\b", r"\bmedigap\b",
-        r"\b(drug|rx|prescription)\b", r"\bpremium(s)?\b", r"\bdeductible(s)?\b", r"\bcms\b",
-        r"\bprior authorization\b",
-    ]),
-    ("Finance & Retirement", [
-        r"\bmoney\b", r"\bfinance\b", r"\bbudget(ing)?\b", r"\bsaving(s)?\b",
-        r"\binvest(ing|ment|ments)?\b", r"\bannuit(y|ies)\b", r"\b401(k)?\b", r"\b403(b)\b",
-        r"\bira(s)?\b", r"\broth\b", r"\bpension(s)?\b", r"\btax(es)?\b", r"\brmds?\b",
-        r"\b(estate|legacy)\s+planning\b", r"\blong[-\s]?term\s+finances?\b",
-    ]),
-    ("Travel", [
-        r"\btravel\b", r"\btrips?\b", r"\bvacations?\b", r"\btours?\b",
-        r"\bhotels?\b", r"\bflights?\b", r"\bcruises?\b", r"\bdestinations?\b", r"\bitinerary\b",
-    ]),
-    ("Golf & Leisure", [
-        r"\bgolf(ing)?\b", r"\bpickleball\b", r"\bleisure\b", r"\bhobby\b",
-        r"\brecreation\b", r"\bfitness\b", r"\bexercise\b", r"\bwalking\b",
-    ]),
-    ("Cooking & Nutrition", [
-        r"\bcook(ing)?\b", r"\brecipes?\b", r"\bnutrition(al)?\b", r"\bdiet(s|ary)?\b",
-        r"\bfood\b", r"\bdining\b", r"\bmeal(s)?\b", r"\bkitchen\b", r"\bmeal\s+prep\b",
-    ]),
-    ("Caregiving & LTC", [
-        r"\bcaregiver(s)?\b", r"\bcaregiving\b", r"\bnursing\s+home(s)?\b",
-        r"\blong[-\s]?term\s+care\b", r"\bltc\b", r"\brespite\b", r"\bhome\s+health\b",
-    ]),
-    ("Aging Research", [
-        r"\baging\b", r"\blongevity\b", r"\balzheim(?:er'?s)?\b", r"\bdementia\b",
-        r"\bnia\b", r"\bnih\b", r"\bfalls?\b", r"\bclinical\s+trial(s)?\b", r"\bresearch\b",
-    ]),
-    ("Policy & Legislation", [
-        r"\bbills?\b", r"\blegislation\b", r"\blaws?\b", r"\bcongress\b",
-        r"\bregulation(s)?\b", r"\brule-?making\b", r"\bproposed rule\b", r"\bhhs\b", r"\bacl\b", r"\boig\b",
-    ]),
+    ("Safety & Scams", [r"scam", r"fraud", r"phish", r"identity theft", r"robocall", r"spoof", r"elder abuse"]),
+    ("Social Security", [r"social security", r"ssa", r"cola", r"ssdi", r"ssi"]),
+    ("Medicare", [r"medicare", r"part\s*[abcd]", r"medigap", r"cms", r"prescription"]),
+    ("Finance & Retirement", [r"401k", r"ira", r"pension", r"tax", r"invest", r"annuit", r"money", r"savings?"]),
+    ("Travel", [r"travel", r"trip", r"vacation", r"cruise", r"hotel", r"destination", r"flight"]),
+    ("Golf & Leisure", [r"golf", r"leisure", r"pickleball", r"hobby", r"recreation"]),
+    ("Exercise & Fitness", [r"exercise", r"fitness", r"walking", r"workout", r"yoga", r"stretch", r"activity"]),
+    ("Cooking & Nutrition", [r"cook", r"recipe", r"nutrition", r"meal", r"diet", r"food", r"healthy eating"]),
+    ("Caregiving & LTC", [r"caregiver", r"long[-\s]?term care", r"nursing home", r"home health"]),
+    ("Aging Research", [r"aging", r"longevity", r"alzheim", r"dementia", r"nih", r"nia", r"clinical trial"]),
+    ("Policy & Legislation", [r"law", r"bill", r"regulation", r"legislation", r"congress"]),
 ]
-COMPILED = [(name, [re.compile(p, re.IGNORECASE) for p in pats]) for name, pats in CATEGORY_RULES]
 
 DOMAIN_HINTS = {
-    # lifestyle
-    "golf.com": "Golf & Leisure",
+    # Lifestyle & Food
+    "foodnetwork.com": "Cooking & Nutrition",
+    "allrecipes.com": "Cooking & Nutrition",
+    "eatingwell.com": "Cooking & Nutrition",
+    "bonappetit.com": "Cooking & Nutrition",
+    # Travel
     "travelandleisure.com": "Travel",
-    "epicurious.com": "Cooking & Nutrition",
-    # finance
+    "lonelyplanet.com": "Travel",
+    "usatoday.com": "Travel",
+    "nytimes.com": "Travel",
+    # Exercise & Leisure
+    "aarp.org/health/fitness": "Exercise & Fitness",
+    "menshealth.com": "Exercise & Fitness",
+    "verywellfit.com": "Exercise & Fitness",
+    # Finance
     "nerdwallet.com": "Finance & Retirement",
     "cnbc.com": "Finance & Retirement",
-    # senior policy/health
+    "kiplinger.com": "Finance & Retirement",
+    # Senior Policy
     "kff.org": "Medicare",
     "kffhealthnews.org": "Medicare",
     "ssa.gov": "Social Security",
     "cms.gov": "Medicare",
     "acl.gov": "Caregiving & LTC",
     "nia.nih.gov": "Aging Research",
-    "cdc.gov": "Aging Research",
     "ftc.gov": "Safety & Scams",
     "justice.gov": "Safety & Scams",
     "hhs.gov": "Policy & Legislation",
-    "aarp.org": "Finance & Retirement",
 }
 
-SCAM_WORDS = ["scam", "fraud", "phishing", "impersonation", "robocall", "spoof", "identity theft", "elder abuse"]
+SCAM_WORDS = ["scam", "fraud", "phishing", "robocall", "spoof", "identity theft", "elder abuse"]
 
-# ---------------- Core helpers ----------------
-def _is_today(dt_iso: str | None) -> bool:
-    if not dt_iso:
-        return False
-    try:
-        return dtp.parse(dt_iso).date() == datetime.now(timezone.utc).date()
-    except Exception:
-        return False
-
-def _strong_rule_category(title: str, summary: str, source: str, link: str) -> str:
-    text = " ".join(x for x in [title or "", summary or "", source or ""] if x)
-    hits = []
-    for idx, (bucket, patterns) in enumerate(COMPILED):
-        score = sum(1 for p in patterns if p.search(text))
-        if score:
-            hits.append((score * (10 - idx), bucket))  # earlier buckets have priority
-    # domain hint
-    host = ""
+# ---------------- Helpers ----------------
+def _strong_category(title, summary, source, link):
+    text = " ".join([title or "", summary or "", source or ""]).lower()
+    for cat, patterns in CATEGORY_RULES:
+        if any(re.search(p, text) for p in patterns):
+            return cat
     try:
         host = (urlparse(link or "").hostname or "").lower().lstrip("www.")
+        if host in DOMAIN_HINTS:
+            return DOMAIN_HINTS[host]
     except Exception:
         pass
-    if host in DOMAIN_HINTS:
-        hits.append((15, DOMAIN_HINTS[host]))  # boost for domain
-    if not hits:
-        return "General"
-    hits.sort(reverse=True)
-    return hits[0][1]
+    return "General"
 
 def _scam_alerts(items):
-    out = []
-    for it in items:
-        t = (it.get("title","") + " " + it.get("summary","")).lower()
-        if any(k in t for k in SCAM_WORDS):
-            out.append(it)
-    return out[:10]
+    return [it for it in items if any(k in (it.get("title","")+it.get("summary","")).lower() for k in SCAM_WORDS)][:10]
 
-def _summary_fallback(items: list[dict]) -> str:
-    # Quick deterministic "state of play" + a few headlines
-    cats = Counter([_strong_rule_category(it.get("title",""), it.get("summary",""), it.get("source",""), it.get("link","")) for it in items[:40]])
-    parts = [f"{c}: {n}" for c, n in sorted(cats.items(), key=lambda x: -x[1])]
-    lines = ["Today’s senior news at a glance — " + "; ".join(parts) + "."]
-    for it in items[:6]:
-        title = it.get("title","").strip()
-        src = it.get("source","").strip()
-        if title: lines.append(f"- {title} ({src})")
+def _summary_fallback(items):
+    cats = Counter(_strong_category(it.get("title",""), it.get("summary",""), it.get("source",""), it.get("link","")) for it in items)
+    parts = [f"{c}: {n}" for c,n in cats.most_common(6)]
+    lines = ["Today’s senior news highlights — " + "; ".join(parts) + "."]
+    for it in items[:5]:
+        lines.append(f"- {it.get('title','')} ({it.get('source','')})")
     return "\n".join(lines)
-
-# ---------------- Optional OpenAI (safe to omit) ----------------
-async def _ai_categorize(items: list[dict]) -> dict:
-    from openai import AsyncOpenAI
-    client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-    batch = [{"id": it.get("id"), "title": it.get("title",""), "summary": it.get("summary","")} for it in items[:60]]
-    prompt = (
-        "Assign one short topic label to each item for older-adult news. "
-        "Use only these buckets when possible: Medicare; Social Security; Finance & Retirement; Travel; Golf & Leisure; "
-        "Cooking & Nutrition; Caregiving & LTC; Aging Research; Safety & Scams; Policy & Legislation; General. "
-        "Return JSON object {id: label}.\nItems:\n" + json.dumps(batch, ensure_ascii=False)
-    )
-    resp = await client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[{"role":"user","content":prompt}],
-        temperature=0.1,
-        max_tokens=900,
-    )
-    text = resp.choices[0].message.content.strip()
-    try:
-        start = text.find("{"); end = text.rfind("}")
-        return json.loads(text[start:end+1])
-    except Exception:
-        return {}
-
-async def _ai_summary(items: list[dict]) -> str:
-    from openai import AsyncOpenAI
-    client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-    bullets = [f"• {it.get('title','')} — {(it.get('summary','') or '')[:200]}" for it in items[:16]]
-    prompt = ("Summarize key developments for U.S. older adults in 120–180 words. "
-              "Cover Medicare, Social Security, Finance/Retirement, Aging Research, Caregiving/LTC, Travel/Leisure, "
-              "Cooking/Nutrition, and Safety/Scams if present. Neutral, precise, plain English. "
-              "Provide 3–5 crisp bullets after the paragraph.\n\nHeadlines:\n" + "\n".join(bullets))
-    resp = await client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[{"role":"user","content":prompt}],
-        temperature=0.2,
-        max_tokens=400,
-    )
-    return resp.choices[0].message.content.strip()
 
 # ---------------- Main ----------------
 def main():
-    blob = {"updated": None, "items": []}
-    if ITEMS_PATH.exists():
-        blob = json.loads(ITEMS_PATH.read_text(encoding="utf-8"))
+    blob = json.loads(ITEMS_PATH.read_text()) if ITEMS_PATH.exists() else {"items":[]}
     items = blob.get("items", [])
 
-    # (Optional) AI label proposals
-    ai_map = {}
-    if OPENAI_API_KEY and items:
-        try:
-            import asyncio
-            ai_map = asyncio.run(_ai_categorize(items))
-        except Exception as e:
-            print(f"[summarize] AI categorize failed: {e}; proceeding with rules only.")
-
-    # Categorize deterministically + counts
     cat_counts = defaultdict(int)
     for it in items:
-        title = it.get("title","")
-        summary = it.get("summary","")
-        source = it.get("source","")
-        link = it.get("link","")
-        raw = ai_map.get(it.get("id")) if ai_map else None
-        bucket = _strong_rule_category(title, summary, source, link)
-        it["subcategory"] = raw or bucket
+        bucket = _strong_category(it.get("title",""), it.get("summary",""), it.get("source",""), it.get("link",""))
         it["category"] = bucket
         cat_counts[bucket] += 1
 
-    # Build summary text
-    todays = [it for it in items if _is_today(it.get("published") or it.get("fetched"))]
-    if OPENAI_API_KEY:
-        try:
-            import asyncio
-            summary = asyncio.run(_ai_summary(todays or items))
-        except Exception as e:
-            print(f"[summarize] AI summary failed: {e}; using fallback.")
-            summary = _summary_fallback(todays or items)
-    else:
-        summary = _summary_fallback(todays or items)
-
-    # Scam alerts
+    summary = _summary_fallback(items)
     alerts = _scam_alerts(items)
 
-    # Persist categories back to items.json
-    ITEMS_PATH.write_text(json.dumps({
-        "updated": blob.get("updated"),
-        "items": items
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    # Write digest.json
     DIGEST_PATH.write_text(json.dumps({
         "generated": datetime.now(timezone.utc).isoformat(),
         "summary": summary,
         "alerts": alerts,
         "category_counts": dict(sorted(cat_counts.items(), key=lambda x: -x[1]))
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    }, indent=2))
 
-    print(f"[summarize] Categorized {len(items)} items across {len(cat_counts)} buckets.")
-    top = list(dict(sorted(cat_counts.items(), key=lambda x: -x[1])).items())[:5]
-    print(f"[summarize] Top buckets: {top}")
+    ITEMS_PATH.write_text(json.dumps({"items": items}, indent=2))
+    print(f"[summarize] Categorized {len(items)} items → {len(cat_counts)} categories")
 
 if __name__ == "__main__":
     main()
