@@ -1,88 +1,76 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI in Architecture — Daily</title>
-  <meta name="color-scheme" content="light only" />
-  <link rel="preload" href="assets/styles.css" as="style" />
-  <link rel="stylesheet" href="assets/styles.css" />
-  <link rel="icon" href="assets/favicon.svg" />
-</head>
-<body>
-  <!-- Top Bar / Nav (matches SND layout) -->
-  <header class="topbar">
-    <div class="container">
-      <div class="brand">AI in Architecture</div>
-      <nav class="nav">
-        <a class="nav-link active" href="./index.html">Home</a>
-        <a class="nav-link" href="./saved.html">Saved</a>
-        <a class="nav-link" href="./archive.html">Archive</a>
-      </nav>
-    </div>
-  </header>
+name: Fetch feeds & Deploy
 
-  <main class="container">
-    <!-- Hero / Summary -->
-    <section class="section">
-      <h1 class="h1">Daily Summary</h1>
-      <p class="muted" id="summaryLine">Today’s highlights by category — …</p>
-      <p class="muted small" id="updatedLine">Last updated: <span id="lastUpdated">—</span></p>
-    </section>
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: "17 5 * * *"   # daily 05:17 UTC
+  workflow_dispatch:
 
-    <!-- Category Chips (auto-filled by app.js) -->
-    <section class="section">
-      <h2 class="h2">Filter by Category</h2>
-      <div id="chips" class="chips"></div>
-    </section>
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
-    <!-- Chart -->
-    <section class="section">
-      <canvas id="categoryChart" height="260"></canvas>
-    </section>
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
-    <!-- Latest Articles (cards) -->
-    <section class="section">
-      <h2 class="h2">Latest Articles</h2>
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
 
-      <!-- Example cards.
-           If your builder already prints items, keep its loop but ensure it uses this markup.
-           The JS will enhance/scan these automatically. Duplicate the .card block per article. -->
-      <div id="cards" class="cards">
-        <!-- TEMPLATE CARD (copy per article) -->
-        <!-- data-category is critical; data-source/date help summary lines. data-saved optional -->
-        <!-- Replace # with actual link, title, source, date, and optional thumbnail -->
-        <!-- Remove this example once your builder populates real cards -->
-        <article class="card" data-category="Generative Design" data-date="2025-10-08" data-source="AEC Magazine">
-          <button class="save" aria-label="Save this article" title="Save">★</button>
-          <a class="thumb" href="#" target="_blank" rel="noopener">
-            <img src="assets/placeholder.jpg" alt="" loading="lazy">
-          </a>
-          <div class="body">
-            <a class="title" href="#" target="_blank" rel="noopener">
-              Parametric to Generative: New AI workflows in facade design
-            </a>
-            <div class="meta">
-              <span class="badge">Generative Design</span>
-              <span class="dot">•</span>
-              <span class="source">AEC Magazine</span>
-              <span class="dot">•</span>
-              <time datetime="2025-10-08">Oct 08, 2025</time>
-            </div>
-            <p class="desc">How firms blend Grasshopper, Revit and diffusion models for early-stage options.</p>
-          </div>
-        </article>
-        <!-- /TEMPLATE -->
-      </div>
-    </section>
-  </main>
+    steps:
+      - uses: actions/checkout@v4
 
-  <footer class="footer">
-    <div class="container"><span class="muted small">Built for daily AI-in-Architecture updates.</span></div>
-  </footer>
+      - name: Show tree before fetch
+        run: |
+          echo "== repo tree BEFORE fetch =="
+          ls -la
+          find . -maxdepth 2 -type f | sort || true
 
-  <!-- Chart.js (vanilla CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="assets/app.js"></script>
-</body>
-</html>
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Fetch feeds -> data/articles.json (best-effort)
+        run: |
+          if [ -f bot/fetch_from_feeds.py ]; then
+            python bot/fetch_from_feeds.py || true
+          else
+            echo "fetcher not present; using committed data/articles.json"
+          fi
+
+      - name: Show tree after fetch
+        run: |
+          echo "== repo tree AFTER fetch =="
+          ls -la
+          echo "== data dir =="
+          ls -la data || true
+          if [ -f data/articles.json ]; then
+            echo "articles count:"
+            python -c "import json; print(len(json.load(open('data/articles.json'))))"
+          else
+            echo "data/articles.json not found"
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Summary link
+        run: |
+          echo "### ✅ Deployed to GitHub Pages" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Open the site](${{ steps.deploy.outputs.page_url }})" >> "$GITHUB_STEP_SUMMARY"
