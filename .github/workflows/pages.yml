@@ -49,14 +49,17 @@ jobs:
             pip install -r requirements.txt
           fi
 
-      # ---------- Run bots ----------
+      # ---------- Fetch & process content (run only if files exist) ----------
       - name: Fetch feeds
         run: |
-          if [ -f bot/fetch.py ]; then
+          if [ -f bot/fetch_from_feeds.py ]; then
+            echo "Running bot/fetch_from_feeds.py"
+            python bot/fetch_from_feeds.py || true
+          elif [ -f bot/fetch.py ]; then
             echo "Running bot/fetch.py"
             python bot/fetch.py || true
           else
-            echo "bot/fetch.py not found; skipping"
+            echo "No fetcher found; skipping"
           fi
 
       - name: Summarize
@@ -77,7 +80,7 @@ jobs:
             echo "bot/site_builder.py not found; skipping"
           fi
 
-      - name: Build sources.json (7-day window)
+      - name: Build sources (JSON + embedded JS)
         run: |
           if [ -f bot/build_sources.py ]; then
             echo "Running bot/build_sources.py"
@@ -90,13 +93,41 @@ jobs:
         run: |
           echo "== data/ after build =="
           ls -la data || true
+          echo "== site/assets/ after build =="
+          ls -la site/assets || true
           if [ -f data/sources.json ]; then
-            python -c "import json, pathlib; p=pathlib.Path('data/sources.json'); j=json.loads(p.read_text(encoding='utf-8')); print('sources.json -> generated_at:', j.get('generated_at')); print('window_days:', j.get('window_days')); print('sources count:', len(j.get('sources', []))); print('first 3 sources:', json.dumps(j.get('sources', [])[:3], ensure_ascii=False, indent=2))"
+            python -c "import json, pathlib; p=pathlib.Path('data/sources.json'); j=json.loads(p.read_text(encoding='utf-8')); print('sources.json -> generated_at:', j.get('generated_at')); print('window_days:', j.get('window_days')); print('sources count:', len(j.get('sources', [])))"
           else
             echo '❌ data/sources.json not found'
           fi
 
-      # ---------- Prepare for deployment ----------
+      # ---------- (Optional) Inject pill tray on homepage ----------
+      # Will only inject if BOTH scripts exist, otherwise it does nothing.
+      - name: Inject sources scripts into homepage (if present)
+        run: |
+          idx="site/index.html"
+          sd="site/assets/sources_data.js"
+          ph="site/assets/pills_home.js"
+          if [ -f "$idx" ] && [ -f "$sd" ] && [ -f "$ph" ]; then
+            if ! grep -q "assets/sources_data.js" "$idx"; then
+              if grep -q "</body>" "$idx"; then
+                sed -i 's#</body>#  <script src="assets/sources_data.js"></script>\n  <script src="assets/pills_home.js" defer></script>\n</body>#' "$idx"
+                echo "Injected scripts before </body>"
+              elif grep -q "</head>" "$idx"; then
+                sed -i 's#</head>#  <script src="assets/sources_data.js"></script>\n  <script src="assets/pills_home.js" defer></script>\n</head>#' "$idx"
+                echo "Injected scripts before </head>"
+              else
+                printf '\n<script src="assets/sources_data.js"></script>\n<script src="assets/pills_home.js" defer></script>\n' >> "$idx"
+                echo "Appended scripts at end of file"
+              fi
+            else
+              echo "Scripts already present; skipping inject"
+            fi
+          else
+            echo "index.html or scripts missing; skipping inject"
+          fi
+
+      # ---------- Package site + data for Pages ----------
       - name: Build public/ bundle (site + data)
         run: |
           rm -rf public
