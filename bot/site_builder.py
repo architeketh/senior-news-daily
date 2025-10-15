@@ -1,6 +1,7 @@
 # bot/site_builder.py
 import pathlib, json, datetime, random
 from urllib.parse import urlparse
+from typing import Any, Dict, Iterable, List
 
 ROOT = pathlib.Path(".")
 DATA = ROOT / "data"
@@ -12,7 +13,7 @@ SITE.mkdir(exist_ok=True)
 ASSETS.mkdir(parents=True, exist_ok=True)
 
 ITEMS_PATH = DATA / "items.json"     # your current feed dump
-SOURCES_OUT = DATA / "sources.json"  # helpful for debugging / reuse
+SOURCES_OUT = DATA / "sources.json"  # for debugging / reuse
 
 # ----------------- helpers -----------------
 def esc(s: str) -> str:
@@ -20,7 +21,7 @@ def esc(s: str) -> str:
 
 def domain_from_url(url: str) -> str:
     try:
-        netloc = urlparse(url).netloc.lower()
+        netloc = urlparse(url or "").netloc.lower()
         return netloc[4:] if netloc.startswith("www.") else netloc
     except Exception:
         return "unknown"
@@ -31,29 +32,85 @@ def load_json(p: pathlib.Path, default):
             return json.load(f)
     return default
 
-def dtparse(s: str|None):
-    if not s:
+# Flexible datetime parser for common fields
+def dtparse(s: Any):
+    if not s or not isinstance(s, str):
         return None
-    # ISO first
+    s = s.strip()
+    # ISO variants
     try:
-        return datetime.datetime.fromisoformat(s.replace("Z","+00:00"))
+        return datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
     except Exception:
         pass
-    # RFC-ish fallback
-    for fmt in ("%a, %d %b %Y %H:%M:%S %z", "%Y-%m-%d %H:%M:%S %z"):
+    # RSS-ish common formats
+    for fmt in (
+        "%a, %d %b %Y %H:%M:%S %z",  # RFC822 with tz
+        "%Y-%m-%d %H:%M:%S %z",
+        "%Y-%m-%d %H:%M:%S",         # naive
+        "%a, %d %b %Y %H:%M:%S GMT",
+    ):
         try:
-            return datetime.datetime.strptime(s, fmt)
+            dt = datetime.datetime.strptime(s, fmt)
+            # assume UTC for naive/GMT
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
+            return dt
         except Exception:
             continue
     return None
 
-def safe_dt(a: dict, now_utc: datetime.datetime):
-    # prefer 'published', then 'updated', then 'fetched_at'
-    for k in ("published", "updated", "fetched_at"):
-        dt = dtparse(a.get(k))
-        if dt:
-            return dt
-    return now_utc
+# Normalize one raw record into a consistent dict
+def normalize_record(raw: Any) -> Dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    # common field aliases
+    title = raw.get("title") or raw.get("headline") or raw.get("name") or ""
+    link  = raw.get("link") or raw.get("url") or raw.get("href") or ""
+    source = raw.get("source") or raw.get("site") or raw.get("feed") or domain_from_url(link)
+
+    # figure a datetime from several candidates
+    dt = (
+        dtparse(raw.get("published"))
+        or dtparse(raw.get("pubDate"))
+        or dtparse(raw.get("isoDate"))
+        or dtparse(raw.get("updated"))
+        or dtparse(raw.get("date"))
+        or dtparse(raw.get("created_at"))
+        or dtparse(raw.get("fetched_at"))
+    )
+
+    out = {
+        "title": title,
+        "link": link,
+        "source": source,
+        "published": raw.get("published") or raw.get("pubDate") or raw.get("isoDate") or raw.get("date"),
+        "updated": raw.get("updated"),
+        "fetched_at": raw.get("fetched_at"),
+        "_dt": dt,  # parsed datetime cache
+    }
+    return out
+
+# Expand top-level containers: dict with "items"/"articles"/"entries"/"results", or a plain list
+def iter_items(container: Any) -> Iterable[Dict[str, Any]]:
+    if isinstance(container, list):
+        for it in container:
+            norm = normalize_record(it)
+            if norm: yield norm
+        return
+    if isinstance(container, dict):
+        for key in ("items", "articles", "entries", "results", "data"):
+            if key in container and isinstance(container[key], list):
+                for it in container[key]:
+                    norm = normalize_record(it)
+                    if norm: yield norm
+                return
+        # As a last-gasp: maybe the dict itself is an article
+        norm = normalize_record(container)
+        if norm:
+            yield norm
+        return
+    # anything else => nothing
+    return
 
 def human_time(dt: datetime.datetime, now: datetime.datetime):
     # normalize tz to 'now'
@@ -77,26 +134,29 @@ def pick_color(seed: str):
     # (bg, text)
     return f"hsl({h} 70% 94%)", f"hsl({h} 70% 28%)"
 
-# ----------------- load items -----------------
-items = load_json(ITEMS_PATH, [])
+# ----------------- load & normalize -----------------
+raw = load_json(ITEMS_PATH, [])
+all_items: List[Dict[str, Any]] = list(iter_items(raw))
+
 now_utc = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
 
 # "current articles" window — 7 days (adjust if you like)
 window_start = now_utc - datetime.timedelta(days=7)
-def in_window(a: dict) -> bool:
-    return safe_dt(a, now_utc) >= window_start
 
-current_items = [a for a in items if in_window(a)]
+def safe_dt(item: Dict[str, Any]) -> datetime.datetime:
+    return item.get("_dt") or now_utc
+
+current_items = [a for a in all_items if safe_dt(a) >= window_start]
 
 # ----------------- per-source stats -----------------
-source_stats = {}
+source_stats: Dict[str, Dict[str, Any]] = {}
 for a in current_items:
-    src = a.get("source") or ""  # some bots set this
-    link = a.get("link") or a.get("url") or ""
+    src = (a.get("source") or "").strip()
+    link = a.get("link") or ""
     dom = domain_from_url(link)
     key = (src or dom or "unknown").lower()
 
-    ts = safe_dt(a, now_utc)
+    ts = safe_dt(a)
     if key not in source_stats:
         source_stats[key] = {
             "display": src or dom or "unknown",
@@ -159,12 +219,11 @@ def render_sources_pills(now: datetime.datetime):
     parts.append("</div>")
     return "\n".join(parts)
 
-def render_article_card(a: dict):
-    # very simple list so the page doesn't look empty
-    link = a.get("link") or a.get("url") or "#"
+def render_article_card(a: Dict[str, Any]):
+    link = a.get("link") or "#"
     title = esc(a.get("title","(untitled)"))
     src = esc(a.get("source") or domain_from_url(link) or "unknown")
-    when = human_time(safe_dt(a, now_utc), now_utc)
+    when = human_time(safe_dt(a), now_utc)
     return (
         "<article class='card'>"
         f"<a href='{esc(link)}' target='_blank' rel='noopener' class='card-title'>{title}</a>"
@@ -176,7 +235,6 @@ def render_article_card(a: dict):
 sources_html = render_sources_pills(now_utc)
 articles_html = "\n".join(render_article_card(a) for a in current_items[:200])
 
-# Simple, standalone page (safe to overwrite site/index.html)
 INDEX_HTML = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -222,4 +280,5 @@ INDEX_HTML = f"""<!doctype html>
 """
 
 (SITE / "index.html").write_text(INDEX_HTML, encoding="utf-8")
-print(f"Built index with {len(current_items)} current articles from {len(source_stats)} sources.")
+
+print(f"Loaded {len(all_items)} items; {len(current_items)} in window; {len(source_stats)} sources.")
