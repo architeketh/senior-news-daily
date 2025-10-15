@@ -50,3 +50,62 @@ img{max-width:100%;display:block}
 
 /* Canvas spacing tweak (tight like SND) */
 .section canvas{display:block;width:100%;max-width:820px;margin:6px 0}
+/* assets/styles.css */
+
+/* --- Sources pill tray --- */
+.pill-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.pill {
+  --pill-bg: color-mix(in oklab, canvas 90%, canvastext 10%);
+  --pill-fg: color-mix(in oklab, canvastext 60%, canvas 40%);
+  background: var(--pill-bg);
+  color: var(--pill-fg);
+  border-radius: 999px;
+  padding: 6px 10px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1;
+  border: 1px solid color-mix(in oklab, var(--pill-fg) 16%, transparent);
+  transition: transform .08s ease, background .2s ease, color .2s ease, border-color .2s ease;
+  white-space: nowrap;
+}
+
+.pill:hover {
+  transform: translateY(-1px);
+  background: color-mix(in oklab, var(--pill-bg) 80%, var(--pill-fg) 20%);
+  color: color-mix(in oklab, var(--pill-fg) 90%, canvas 10%);
+  border-color: color-mix(in oklab, var(--pill-fg) 30%, transparent);
+}
+
+.pill-site {
+  font-weight: 600;
+  letter-spacing: .2px;
+}
+
+.pill-dot {
+  opacity: .6;
+}
+
+.pill-when {
+  opacity: .9;
+  font-variant-numeric: tabular-nums;
+}
+
+.pill-count {
+  opacity: .7;
+}
+
+/* Wrap nicely on mobile */
+@media (max-width: 640px) {
+  .pill {
+    font-size: 0.95rem;
+  }
+}
+
