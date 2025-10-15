@@ -21,3 +21,12 @@
 .pill-when{ opacity:.9; font-variant-numeric: tabular-nums; }
 .pill-count{ opacity:.7; }
 @media (max-width:640px){ .pill{ font-size:.95rem; } }
+/* CTA pill to sources.html */
+.pill-cta {
+  font-weight: 700;
+  border-style: dashed;
+}
+.pill-cta:hover {
+  text-decoration: none;
+}
+
