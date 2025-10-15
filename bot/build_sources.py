@@ -7,8 +7,9 @@ ROOT = pathlib.Path(".")
 DATA = ROOT / "data"
 DATA.mkdir(exist_ok=True)
 
-ITEMS = DATA / "items.json"
-OUT = DATA / "sources.json"
+ARTICLES = DATA / "articles.json"
+ITEMS    = DATA / "items.json"
+OUT      = DATA / "sources.json"
 
 def domain(u: str) -> str:
     try:
@@ -50,8 +51,8 @@ def norm(rec: Any) -> Optional[Dict[str, Any]]:
     if not isinstance(rec, dict):
         return None
     link = rec.get("link") or rec.get("url") or rec.get("href") or ""
-    src = rec.get("source") or rec.get("site") or rec.get("feed") or domain(link)
-    dtx = (
+    src  = rec.get("source") or rec.get("site") or rec.get("feed") or domain(link)
+    dtx  = (
         dtparse(rec.get("published"))
         or dtparse(rec.get("pubDate"))
         or dtparse(rec.get("isoDate"))
@@ -60,12 +61,8 @@ def norm(rec: Any) -> Optional[Dict[str, Any]]:
         or dtparse(rec.get("created_at"))
         or dtparse(rec.get("fetched_at"))
     )
-    return {
-        "title": rec.get("title") or rec.get("headline") or rec.get("name") or "",
-        "link": link,
-        "source": src,
-        "_dt": dtx,
-    }
+    return {"title": rec.get("title") or rec.get("headline") or rec.get("name") or "",
+            "link": link, "source": src, "_dt": dtx}
 
 def iter_items(container: Any) -> Iterable[Dict[str, Any]]:
     if isinstance(container, list):
@@ -75,7 +72,7 @@ def iter_items(container: Any) -> Iterable[Dict[str, Any]]:
                 yield n
         return
     if isinstance(container, dict):
-        for k in ("items", "articles", "entries", "results", "data"):
+        for k in ("items","articles","entries","results","data"):
             v = container.get(k)
             if isinstance(v, list):
                 for x in v:
@@ -87,11 +84,16 @@ def iter_items(container: Any) -> Iterable[Dict[str, Any]]:
         if n:
             yield n
 
-raw = load_json(ITEMS, [])
-items: List[Dict[str, Any]] = list(iter_items(raw))
+# Prefer articles.json; fallback to items.json
+raw = load_json(ARTICLES, None)
+if raw is None:
+    raw = load_json(ITEMS, [])
 
+items: List[Dict[str, Any]] = list(iter_items(raw))
 now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
-window_start = now - datetime.timedelta(days=7)
+
+# widen to 30 days to ensure visibility; change to 7 if you want tighter
+window_start = now - datetime.timedelta(days=30)
 
 def safe_dt(it: Dict[str, Any]) -> datetime.datetime:
     return it.get("_dt") or now
@@ -102,47 +104,29 @@ stats: Dict[str, Dict[str, Any]] = {}
 for a in curr:
     dom = domain(a.get("link", ""))
     key = (a.get("source") or dom or "unknown").lower()
-    ts = safe_dt(a)
-    if key not in stats:
-        stats[key] = {
-            "display": a.get("source") or dom or "unknown",
-            "domain": dom or "unknown",
-            "count": 0,
-            "last_dt": ts,
-            "last_title": a.get("title", ""),
-            "last_link": a.get("link", ""),
-        }
-    s = stats[key]
+    ts  = safe_dt(a)
+    s = stats.setdefault(key, {
+        "display": a.get("source") or dom or "unknown",
+        "domain": dom or "unknown",
+        "count": 0,
+        "last_dt": ts,
+        "last_title": a.get("title",""),
+        "last_link": a.get("link","")
+    })
     s["count"] += 1
     if ts > s["last_dt"]:
-        s["last_dt"] = ts
-        s["last_title"] = a.get("title", "")
-        s["last_link"] = a.get("link", "")
+        s["last_dt"]   = ts
+        s["last_title"] = a.get("title","")
+        s["last_link"]  = a.get("link","")
 
-OUT.write_text(
-    json.dumps(
-        {
-            "generated_at": now.isoformat(),
-            "window_days": 7,
-            "sources": [
-                {
-                    "key": k,
-                    "display": v["display"],
-                    "domain": v["domain"],
-                    "count": v["count"],
-                    "last_dt": v["last_dt"].isoformat(),
-                    "last_title": v["last_title"],
-                    "last_link": v["last_link"],
-                }
-                for k, v in sorted(stats.items(), key=lambda kv: (-kv[1]["count"], kv[0]))
-            ],
-        },
-        ensure_ascii=False,
-        indent=2,
-    ),
-    encoding="utf-8",
-)
+OUT.write_text(json.dumps({
+    "generated_at": now.isoformat(),
+    "window_days": 30,
+    "sources": [
+        {"key": k, "display": v["display"], "domain": v["domain"], "count": v["count"],
+         "last_dt": v["last_dt"].isoformat(), "last_title": v["last_title"], "last_link": v["last_link"]}
+        for k, v in sorted(stats.items(), key=lambda kv: (-kv[1]["count"], kv[0]))
+    ]
+}, ensure_ascii=False, indent=2), encoding="utf-8")
 
-print(
-    f"[build_sources] items={len(items)} current={len(curr)} sources={len(stats)} -> data/sources.json"
-)
+print(f"[build_sources] items={len(items)} current={len(curr)} sources={len(stats)} -> data/sources.json")
