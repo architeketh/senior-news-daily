@@ -26,15 +26,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show tree (before)
+      - name: Show repo tree (before)
         run: |
-          echo "== repo tree (top) =="
+          echo "== repo tree =="
           ls -la
-          echo "== bot/ =="
+          echo "== bot =="
           ls -la bot || true
-          echo "== data/ =="
+          echo "== data =="
           ls -la data || true
-          echo "== site/ =="
+          echo "== site =="
           ls -la site || true
 
       - name: Setup Python
@@ -42,13 +42,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps (if requirements.txt)
+      - name: Install dependencies (if requirements.txt exists)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
 
-      # --- Fetch & process content (only if files exist) ---
-      - name: Fetch feeds (bot/fetch.py)
+      # ---------- Run bots ----------
+      - name: Fetch feeds
         run: |
           if [ -f bot/fetch.py ]; then
             echo "Running bot/fetch.py"
@@ -57,7 +59,7 @@ jobs:
             echo "bot/fetch.py not found; skipping"
           fi
 
-      - name: Summarize (bot/summarize.py)
+      - name: Summarize
         run: |
           if [ -f bot/summarize.py ]; then
             echo "Running bot/summarize.py"
@@ -66,7 +68,7 @@ jobs:
             echo "bot/summarize.py not found; skipping"
           fi
 
-      - name: Build site pages (bot/site_builder.py)
+      - name: Build site pages
         run: |
           if [ -f bot/site_builder.py ]; then
             echo "Running bot/site_builder.py"
@@ -79,31 +81,23 @@ jobs:
         run: |
           if [ -f bot/build_sources.py ]; then
             echo "Running bot/build_sources.py"
-            python bot/build_sources.py
+            python bot/build_sources.py || true
           else
             echo "bot/build_sources.py not found; skipping"
           fi
 
       - name: Show data after build
         run: |
-          echo "== data/ after bots =="
+          echo "== data/ after build =="
           ls -la data || true
-          # Print a tiny summary if sources.json exists
-          python - <<'PY'
-import json, pathlib
-p = pathlib.Path("data/sources.json")
-if p.exists():
-    j = json.loads(p.read_text(encoding="utf-8"))
-    print("sources.json -> generated_at:", j.get("generated_at"))
-    print("window_days:", j.get("window_days"))
-    print("count:", len(j.get("sources", [])))
-    print("first 3:", json.dumps(j.get("sources", [])[:3], ensure_ascii=False, indent=2))
-else:
-    print("sources.json not found")
-PY
+          if [ -f data/sources.json ]; then
+            python -c "import json, pathlib; p=pathlib.Path('data/sources.json'); j=json.loads(p.read_text(encoding='utf-8')); print('sources.json -> generated_at:', j.get('generated_at')); print('window_days:', j.get('window_days')); print('sources count:', len(j.get('sources', []))); print('first 3 sources:', json.dumps(j.get('sources', [])[:3], ensure_ascii=False, indent=2))"
+          else
+            echo '❌ data/sources.json not found'
+          fi
 
-      # --- Prepare publish bundle (site + data) ---
-      - name: Build public/ bundle
+      # ---------- Prepare for deployment ----------
+      - name: Build public/ bundle (site + data)
         run: |
           rm -rf public
           mkdir -p public
