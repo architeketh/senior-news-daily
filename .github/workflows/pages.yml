@@ -66,6 +66,9 @@ jobs:
 
       - name: Build website
         run: python bot/site_builder.py
+        
+      - name: Build sources.json (7-day window)
+        run: python bot/build_sources.py
 
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
