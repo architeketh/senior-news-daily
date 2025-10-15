@@ -5,11 +5,16 @@ from typing import Any, Dict, Iterable, List, Optional
 
 ROOT = pathlib.Path(".")
 DATA = ROOT / "data"
+SITE = ROOT / "site"
+ASSETS = SITE / "assets"
+
 DATA.mkdir(exist_ok=True)
+ASSETS.mkdir(parents=True, exist_ok=True)
 
 ARTICLES = DATA / "articles.json"
 ITEMS    = DATA / "items.json"
-OUT      = DATA / "sources.json"
+OUT_JSON = DATA / "sources.json"
+OUT_JS   = ASSETS / "sources_data.js"
 
 def domain(u: str) -> str:
     try:
@@ -61,8 +66,12 @@ def norm(rec: Any) -> Optional[Dict[str, Any]]:
         or dtparse(rec.get("created_at"))
         or dtparse(rec.get("fetched_at"))
     )
-    return {"title": rec.get("title") or rec.get("headline") or rec.get("name") or "",
-            "link": link, "source": src, "_dt": dtx}
+    return {
+        "title": rec.get("title") or rec.get("headline") or rec.get("name") or "",
+        "link": link,
+        "source": src,
+        "_dt": dtx,
+    }
 
 def iter_items(container: Any) -> Iterable[Dict[str, Any]]:
     if isinstance(container, list):
@@ -92,7 +101,7 @@ if raw is None:
 items: List[Dict[str, Any]] = list(iter_items(raw))
 now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
 
-# widen to 30 days to ensure visibility; change to 7 if you want tighter
+# window: widen to 30 days so you see data reliably
 window_start = now - datetime.timedelta(days=30)
 
 def safe_dt(it: Dict[str, Any]) -> datetime.datetime:
@@ -119,7 +128,7 @@ for a in curr:
         s["last_title"] = a.get("title","")
         s["last_link"]  = a.get("link","")
 
-OUT.write_text(json.dumps({
+payload = {
     "generated_at": now.isoformat(),
     "window_days": 30,
     "sources": [
@@ -127,6 +136,15 @@ OUT.write_text(json.dumps({
          "last_dt": v["last_dt"].isoformat(), "last_title": v["last_title"], "last_link": v["last_link"]}
         for k, v in sorted(stats.items(), key=lambda kv: (-kv[1]["count"], kv[0]))
     ]
-}, ensure_ascii=False, indent=2), encoding="utf-8")
+}
 
-print(f"[build_sources] items={len(items)} current={len(curr)} sources={len(stats)} -> data/sources.json")
+# Write JSON for reference
+OUT_JSON.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+# Write embedded JS so the page doesn’t need to fetch
+OUT_JS.write_text(
+    "window.SOURCES_DATA = " + json.dumps(payload, ensure_ascii=False) + ";\n",
+    encoding="utf-8"
+)
+
+print(f"[build_sources] items={len(items)} current={len(curr)} sources={len(stats)} -> data/sources.json & site/assets/sources_data.js")
