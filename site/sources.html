@@ -17,6 +17,8 @@
       border-radius:10px;padding:8px 12px;text-decoration:none}
     #status{font-size:.9rem;opacity:.75;margin-top:8px;white-space:pre-wrap}
   </style>
+  <!-- Embedded data generated at build time -->
+  <script src="assets/sources_data.js"></script>
 </head>
 <body>
   <main>
@@ -35,7 +37,7 @@
   </main>
 
   <script>
-  (async function(){
+  (function(){
     const el = document.getElementById('tray');
     const status = document.getElementById('status');
 
@@ -54,51 +56,32 @@
       seed = seed || "x"; let h=0; for(let i=0;i<seed.length;i++) h=(h*31+seed.charCodeAt(i))%360;
       return [`hsl(${h} 70% 94%)`,`hsl(${h} 70% 28%)`];
     }
-    function rootPath(){ // e.g., https://architeketh.github.io/senior-news-daily/
-      const {origin, pathname} = window.location;
-      const base = pathname.replace(/[^/]*$/, ""); // drop filename (sources.html)
-      return origin + base; // includes trailing slash
+
+    const data = (window.SOURCES_DATA || {});
+    const sources = Array.isArray(data.sources) ? data.sources : [];
+    status.textContent = `window_days: ${data.window_days || 'n/a'} • sources: ${sources.length}` + (data.generated_at ? ` • generated_at: ${data.generated_at}` : '');
+
+    if(!sources.length){
+      el.innerHTML = '<div class="sub">No sources found in the current window.</div>';
+      return;
     }
 
-    try{
-      const jsonUrl = rootPath() + "data/sources.json";
-      status.textContent = "Fetching: " + jsonUrl;
-
-      const res = await fetch(jsonUrl, {cache:'no-store'});
-      if(!res.ok){
-        status.textContent += `\nFetch failed: ${res.status} ${res.statusText}`;
-        el.innerHTML = '<div class="sub">No sources.json yet.</div>';
-        return;
-      }
-      const data = await res.json();
-      const sources = data.sources || [];
-      status.textContent += `\nGenerated: ${data.generated_at || 'n/a'} • window_days: ${data.window_days || 'n/a'} • sources: ${sources.length}`;
-      if(!sources.length){
-        el.innerHTML = '<div class="sub">No sources found in the current window.</div>';
-        return;
-      }
-
-      const tray = document.createElement('div'); tray.className='pill-tray';
-      for(const v of sources){
-        const [bg,fg]=color(v.domain||v.display||"x");
-        const a=document.createElement('a');
-        a.className='pill'; a.style.setProperty('--pill-bg',bg); a.style.setProperty('--pill-fg',fg);
-        a.href=v.domain?`https://${v.domain}`:'#'; a.target='_blank'; a.rel='noopener';
-        a.title=v.last_title ? `${v.last_title} (${v.last_link||''})` : (v.last_link||'');
-        a.innerHTML = `
-          <span class="pill-site">${esc(v.display||v.domain||"unknown")}</span>
-          <span class="pill-dot" aria-hidden="true">•</span>
-          <span class="pill-when">${esc(human(v.last_dt))}</span>
-          <span class="pill-count" title="Articles in window">(${Number(v.count||0)})</span>
-        `;
-        tray.appendChild(a);
-      }
-      el.replaceChildren(tray);
-    }catch(e){
-      status.textContent += "\nJS error: " + (e && e.message ? e.message : e);
-      el.innerHTML = '<div class="sub">Error loading sources.</div>';
-      console.warn(e);
+    const tray = document.createElement('div'); tray.className='pill-tray';
+    for(const v of sources){
+      const [bg,fg]=color(v.domain||v.display||"x");
+      const a=document.createElement('a');
+      a.className='pill'; a.style.setProperty('--pill-bg',bg); a.style.setProperty('--pill-fg',fg);
+      a.href=v.domain?`https://${v.domain}`:'#'; a.target='_blank'; a.rel='noopener';
+      a.title=v.last_title ? `${v.last_title} (${v.last_link||''})` : (v.last_link||'');
+      a.innerHTML = `
+        <span class="pill-site">${esc(v.display||v.domain||"unknown")}</span>
+        <span class="pill-dot" aria-hidden="true">•</span>
+        <span class="pill-when">${esc(human(v.last_dt))}</span>
+        <span class="pill-count" title="Articles in window">(${Number(v.count||0)})</span>
+      `;
+      tray.appendChild(a);
     }
+    el.replaceChildren(tray);
   })();
   </script>
 </body>
