@@ -15,6 +15,7 @@
     .divider{height:1px;background:color-mix(in oklab, canvastext 14%, canvas 86%);margin:16px 0}
     a.btn{display:inline-block;border:1px solid color-mix(in oklab, canvastext 18%, transparent);
       border-radius:10px;padding:8px 12px;text-decoration:none}
+    #status{font-size:.9rem;opacity:.75;margin-top:8px;white-space:pre-wrap}
   </style>
 </head>
 <body>
@@ -22,7 +23,8 @@
     <header>
       <div>
         <h1>Sources</h1>
-        <div class="sub">Sites contributing articles in the past 7 days, with last-seen times.</div>
+        <div class="sub">Sites contributing articles in the past 30 days, with last-seen times.</div>
+        <div id="status">Loading…</div>
       </div>
       <a class="btn" href="./">← Back to Home</a>
     </header>
@@ -35,6 +37,8 @@
   <script>
   (async function(){
     const el = document.getElementById('tray');
+    const status = document.getElementById('status');
+
     function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
     function human(dtStr){
       try{
@@ -50,12 +54,29 @@
       seed = seed || "x"; let h=0; for(let i=0;i<seed.length;i++) h=(h*31+seed.charCodeAt(i))%360;
       return [`hsl(${h} 70% 94%)`,`hsl(${h} 70% 28%)`];
     }
+    function rootPath(){ // e.g., https://architeketh.github.io/senior-news-daily/
+      const {origin, pathname} = window.location;
+      const base = pathname.replace(/[^/]*$/, ""); // drop filename (sources.html)
+      return origin + base; // includes trailing slash
+    }
+
     try{
-      const res = await fetch('../data/sources.json', {cache:'no-store'});
-      if(!res.ok) { el.innerHTML = '<div class="sub">No sources.json yet.</div>'; return; }
+      const jsonUrl = rootPath() + "data/sources.json";
+      status.textContent = "Fetching: " + jsonUrl;
+
+      const res = await fetch(jsonUrl, {cache:'no-store'});
+      if(!res.ok){
+        status.textContent += `\nFetch failed: ${res.status} ${res.statusText}`;
+        el.innerHTML = '<div class="sub">No sources.json yet.</div>';
+        return;
+      }
       const data = await res.json();
       const sources = data.sources || [];
-      if(!sources.length){ el.innerHTML = '<div class="sub">No sources found in the last 7 days.</div>'; return; }
+      status.textContent += `\nGenerated: ${data.generated_at || 'n/a'} • window_days: ${data.window_days || 'n/a'} • sources: ${sources.length}`;
+      if(!sources.length){
+        el.innerHTML = '<div class="sub">No sources found in the current window.</div>';
+        return;
+      }
 
       const tray = document.createElement('div'); tray.className='pill-tray';
       for(const v of sources){
@@ -74,6 +95,7 @@
       }
       el.replaceChildren(tray);
     }catch(e){
+      status.textContent += "\nJS error: " + (e && e.message ? e.message : e);
       el.innerHTML = '<div class="sub">Error loading sources.</div>';
       console.warn(e);
     }
