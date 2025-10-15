@@ -14,6 +14,7 @@ feeds:
   - https://www.ftc.gov/news-events/news/rss
   - https://www.justice.gov/elderjustice/rss.xml
   - https://www.hhs.gov/about/news/rss.xml
+  - https://www.boldin.com/
 
   # Lifestyle & leisure (new broadened sites)
   - https://golf.com/feed/
@@ -22,3 +23,4 @@ feeds:
   - https://www.cnbc.com/id/10000354/device/rss/rss.html
   - https://www.nerdwallet.com/blog/feed/
   - https://feeds.npr.org/1001/rss.xml
+  - https://www.travelocity.com/
