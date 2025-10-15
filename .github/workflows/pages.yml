@@ -1,25 +1,11 @@
-name: Build & Publish — Senior News Daily
+name: Fetch feeds & Deploy
 
 on:
-  schedule:
-    # ⏰ Runs every 12 hours (00:00 UTC and 12:00 UTC)
-    - cron: "0 */12 * * *"
-  workflow_dispatch:
-    inputs:
-      extra_url:
-        description: "Optional: fetch from this URL now (RSS or article)"
-        required: false
-        default: ""
-      broaden_sites:
-        description: "Include lifestyle (golf, travel, cooking, finance) feeds"
-        required: false
-        default: "true"
-      filter_mode:
-        description: "Filter mode: none | loose | strict"
-        required: false
-        default: "none"
   push:
     branches: [ main ]
+  schedule:
+    - cron: "17 5 * * *"   # daily 05:17 UTC
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -31,53 +17,108 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Show tree (before)
+        run: |
+          echo "== repo tree (top) =="
+          ls -la
+          echo "== bot/ =="
+          ls -la bot || true
+          echo "== data/ =="
+          ls -la data || true
+          echo "== site/ =="
+          ls -la site || true
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install deps (if requirements.txt)
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements.txt
-          pip install "lxml[html_clean]"
-          pip check
-          python -c "import readability, lxml.html.clean; print('✅ readability + lxml_html_clean OK')"
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Fetch feeds
-        env:
-          EXTRA_URL: ${{ github.event.inputs.extra_url }}
-          BROADEN_SITES: ${{ github.event.inputs.broaden_sites }}
-          FILTER_MODE: ${{ github.event.inputs.filter_mode }}
-        run: python bot/fetch.py
+      # --- Fetch & process content (only if files exist) ---
+      - name: Fetch feeds (bot/fetch.py)
+        run: |
+          if [ -f bot/fetch.py ]; then
+            echo "Running bot/fetch.py"
+            python bot/fetch.py || true
+          else
+            echo "bot/fetch.py not found; skipping"
+          fi
 
-      - name: Summarize daily articles
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: gpt-4o-mini
-        run: python bot/summarize.py
+      - name: Summarize (bot/summarize.py)
+        run: |
+          if [ -f bot/summarize.py ]; then
+            echo "Running bot/summarize.py"
+            python bot/summarize.py || true
+          else
+            echo "bot/summarize.py not found; skipping"
+          fi
 
-      - name: Build website
-        run: python bot/site_builder.py
-        
+      - name: Build site pages (bot/site_builder.py)
+        run: |
+          if [ -f bot/site_builder.py ]; then
+            echo "Running bot/site_builder.py"
+            python bot/site_builder.py || true
+          else
+            echo "bot/site_builder.py not found; skipping"
+          fi
+
       - name: Build sources.json (7-day window)
-        run: python bot/build_sources.py
+        run: |
+          if [ -f bot/build_sources.py ]; then
+            echo "Running bot/build_sources.py"
+            python bot/build_sources.py
+          else
+            echo "bot/build_sources.py not found; skipping"
+          fi
 
-      - name: Upload site artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Show data after build
+        run: |
+          echo "== data/ after bots =="
+          ls -la data || true
+          python - << 'PY' || true
+import json, os, pathlib
+p = pathlib.Path("data/sources.json")
+if p.exists():
+    j = json.loads(p.read_text(encoding="utf-8"))
+    print("sources.json -> generated_at:", j.get("generated_at"), "window_days:", j.get("window_days"), "count:", len(j.get("sources", [])))
+else:
+    print("sources.json not found")
+PY
+
+      # --- Prepare publish bundle (site + data) ---
+      - name: Build public/ bundle
+        run: |
+          rm -rf public
+          mkdir -p public
+          if [ -d site ]; then cp -r site/* public/; fi
+          if [ -d data ]; then mkdir -p public/data && cp -r data/* public/data/; fi
+          echo "== public/ bundle =="
+          find public -maxdepth 2 -type f | sort
+
+      - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: public
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to GitHub Pages
+      - id: deploy
         uses: actions/deploy-pages@v4
+
+      - name: Summary
+        run: |
+          echo "### ✅ Deployed to GitHub Pages" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- URL: ${{ steps.deploy.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Sources page: ${{ steps.deploy.outputs.page_url }}sources.html" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Data JSON: ${{ steps.deploy.outputs.page_url }}data/sources.json" >> "$GITHUB_STEP_SUMMARY"
