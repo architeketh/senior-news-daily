@@ -49,7 +49,7 @@ jobs:
             pip install -r requirements.txt
           fi
 
-      # ---------- Fetch & process content (run only if files exist) ----------
+      # ---------- Fetch & Process Content ----------
       - name: Fetch feeds
         run: |
           if [ -f bot/fetch_from_feeds.py ]; then
@@ -59,7 +59,7 @@ jobs:
             echo "Running bot/fetch.py"
             python bot/fetch.py || true
           else
-            echo "No fetcher found; skipping"
+            echo "No fetch script found; skipping"
           fi
 
       - name: Summarize
@@ -101,33 +101,41 @@ jobs:
             echo '❌ data/sources.json not found'
           fi
 
-      # ---------- (Optional) Inject pill tray on homepage ----------
-      # Will only inject if BOTH scripts exist, otherwise it does nothing.
-      - name: Inject sources scripts into homepage (if present)
+      # ---------- Inject Menu Scripts ----------
+      - name: Inject Sources menu & data scripts
         run: |
           idx="site/index.html"
           sd="site/assets/sources_data.js"
-          ph="site/assets/pills_home.js"
-          if [ -f "$idx" ] && [ -f "$sd" ] && [ -f "$ph" ]; then
-            if ! grep -q "assets/sources_data.js" "$idx"; then
+          ns="site/assets/nav-sources.js"
+          if [ -f "$idx" ]; then
+            # Inject sources_data.js (for embedded data)
+            if [ -f "$sd" ] && ! grep -q "assets/sources_data.js" "$idx"; then
               if grep -q "</body>" "$idx"; then
-                sed -i 's#</body>#  <script src="assets/sources_data.js"></script>\n  <script src="assets/pills_home.js" defer></script>\n</body>#' "$idx"
-                echo "Injected scripts before </body>"
+                sed -i 's#</body>#  <script src="assets/sources_data.js"></script>\n</body>#' "$idx"
               elif grep -q "</head>" "$idx"; then
-                sed -i 's#</head>#  <script src="assets/sources_data.js"></script>\n  <script src="assets/pills_home.js" defer></script>\n</head>#' "$idx"
-                echo "Injected scripts before </head>"
+                sed -i 's#</head>#  <script src="assets/sources_data.js"></script>\n</head>#' "$idx"
               else
-                printf '\n<script src="assets/sources_data.js"></script>\n<script src="assets/pills_home.js" defer></script>\n' >> "$idx"
-                echo "Appended scripts at end of file"
+                printf '\n<script src="assets/sources_data.js"></script>\n' >> "$idx"
               fi
+            fi
+            # Inject nav-sources.js (adds "Sources" link in nav)
+            if [ -f "$ns" ] && ! grep -q "assets/nav-sources.js" "$idx"; then
+              if grep -q "</body>" "$idx"; then
+                sed -i 's#</body>#  <script src="assets/nav-sources.js" defer></script>\n</body>#' "$idx"
+              elif grep -q "</head>" "$idx"; then
+                sed -i 's#</head>#  <script src="assets/nav-sources.js" defer></script>\n</head>#' "$idx"
+              else
+                printf '\n<script src="assets/nav-sources.js" defer></script>\n' >> "$idx"
+              fi
+              echo "✅ Injected nav-sources.js (adds menu link)"
             else
-              echo "Scripts already present; skipping inject"
+              echo "nav-sources.js missing or already injected"
             fi
           else
-            echo "index.html or scripts missing; skipping inject"
+            echo "site/index.html not found; skipping inject"
           fi
 
-      # ---------- Package site + data for Pages ----------
+      # ---------- Package Site + Data for Pages ----------
       - name: Build public/ bundle (site + data)
         run: |
           rm -rf public
