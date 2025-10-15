@@ -101,52 +101,50 @@ jobs:
             echo '❌ data/sources.json not found'
           fi
 
-      # ---------- Inject Menu & Footer Scripts ----------
-      - name: Inject Sources menu & Venmo footer
+      # ---------- Inject Menu & Support Message ----------
+      - name: Inject Sources menu & support note
         run: |
           idx="site/index.html"
           sd="site/assets/sources_data.js"
           ns="site/assets/nav-sources.js"
+          th="site/assets/thanks.js"
 
           if [ -f "$idx" ]; then
-            echo "Injecting scripts and footer into index.html"
+            echo "Injecting scripts into index.html"
 
-            # --- Inject embedded data script ---
-            if [ -f "$sd" ] && ! grep -q "assets/sources_data.js" "$idx"; then
-              if grep -q "</body>" "$idx"; then
-                sed -i 's#</body>#  <script src="assets/sources_data.js"></script>\n</body>#' "$idx"
-              elif grep -q "</head>" "$idx"; then
-                sed -i 's#</head>#  <script src="assets/sources_data.js"></script>\n</head>#' "$idx"
+            # Embedded sources data
+            if [ -f "$sd" ] && ! grep -qi "assets/sources_data.js" "$idx"; then
+              if grep -qi "</body>" "$idx"; then
+                sed -i 's#</body>#  <script src="assets/sources_data.js"></script>\n</body>#I' "$idx"
+              elif grep -qi "</head>" "$idx"; then
+                sed -i 's#</head>#  <script src="assets/sources_data.js"></script>\n</head>#I' "$idx"
               else
                 printf '\n<script src="assets/sources_data.js"></script>\n' >> "$idx"
               fi
             fi
 
-            # --- Inject nav-sources.js ---
-            if [ -f "$ns" ] && ! grep -q "assets/nav-sources.js" "$idx"; then
-              if grep -q "</body>" "$idx"; then
-                sed -i 's#</body>#  <script src="assets/nav-sources.js" defer></script>\n</body>#' "$idx"
-              elif grep -q "</head>" "$idx"; then
-                sed -i 's#</head>#  <script src="assets/nav-sources.js" defer></script>\n</head>#' "$idx"
+            # Add “Sources” menu item
+            if [ -f "$ns" ] && ! grep -qi "assets/nav-sources.js" "$idx"; then
+              if grep -qi "</body>" "$idx"; then
+                sed -i 's#</body>#  <script src="assets/nav-sources.js" defer></script>\n</body>#I' "$idx"
+              elif grep -qi "</head>" "$idx"; then
+                sed -i 's#</head>#  <script src="assets/nav-sources.js" defer></script>\n</head>#I' "$idx"
               else
                 printf '\n<script src="assets/nav-sources.js" defer></script>\n' >> "$idx"
               fi
-              echo "✅ Injected nav-sources.js (adds menu link)"
-            else
-              echo "nav-sources.js missing or already injected"
+              echo "✅ Injected nav-sources.js"
             fi
 
-            # --- Inject Venmo footer message ---
-            if ! grep -q "MikeHnastchenko" "$idx"; then
-              footer='<footer style="text-align:center; margin:2rem 0; font-size:0.9rem; opacity:0.8;">If you like what you are seeing, Venmo: <a href="https://venmo.com/MikeHnastchenko" target="_blank">@MikeHnastchenko</a> or Email: <a href="mailto:Architek.eth@gmail.com">Architek.eth@gmail.com</a></footer>'
-              if grep -q "</body>" "$idx"; then
-                sed -i "s#</body>#${footer}\n</body>#" "$idx"
+            # Runtime support note (Venmo + Email)
+            if [ -f "$th" ] && ! grep -qi "assets/thanks.js" "$idx"; then
+              if grep -qi "</body>" "$idx"; then
+                sed -i 's#</body>#  <script src="assets/thanks.js" defer></script>\n</body>#I' "$idx"
+              elif grep -qi "</head>" "$idx"; then
+                sed -i 's#</head>#  <script src="assets/thanks.js" defer></script>\n</head>#I' "$idx"
               else
-                printf '\n%s\n' "$footer" >> "$idx"
+                printf '\n<script src="assets/thanks.js" defer></script>\n' >> "$idx"
               fi
-              echo "✅ Injected Venmo footer"
-            else
-              echo "Venmo footer already present; skipping"
+              echo "✅ Injected thanks.js (support note)"
             fi
           else
             echo "site/index.html not found; skipping injections"
@@ -176,4 +174,4 @@ jobs:
           echo "- URL: ${{ steps.deploy.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Sources page: ${{ steps.deploy.outputs.page_url }}sources.html" >> "$GITHUB_STEP_SUMMARY"
           echo "- Data JSON: ${{ steps.deploy.outputs.page_url }}data/sources.json" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Venmo footer added with contact info." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Support note injected (Venmo + Email)." >> "$GITHUB_STEP_SUMMARY"
