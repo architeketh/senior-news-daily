@@ -1,7 +1,7 @@
 # bot/site_builder.py
-import pathlib, json, datetime, random
+import pathlib, json, datetime, random, re
 from urllib.parse import urlparse
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 ROOT = pathlib.Path(".")
 DATA = ROOT / "data"
@@ -12,8 +12,10 @@ DATA.mkdir(exist_ok=True)
 SITE.mkdir(exist_ok=True)
 ASSETS.mkdir(parents=True, exist_ok=True)
 
-ITEMS_PATH = DATA / "items.json"
-SOURCES_OUT = DATA / "sources.json"
+ITEMS_PATH   = DATA / "items.json"
+SOURCES_JSON = DATA / "sources.json"
+INDEX_HTML   = SITE / "index.html"          # your real page (we will inject into it)
+PILLS_CSS    = ASSETS / "pills.css"         # stylesheet for the pills
 
 # ----------------- helpers -----------------
 def esc(s: str) -> str:
@@ -32,7 +34,7 @@ def load_json(p: pathlib.Path, default):
             return json.load(f)
     return default
 
-def dtparse(s: Any):
+def dtparse(s: Any) -> Optional[datetime.datetime]:
     if not s or not isinstance(s, str):
         return None
     s = s.strip()
@@ -42,9 +44,9 @@ def dtparse(s: Any):
         pass
     for fmt in (
         "%a, %d %b %Y %H:%M:%S %z",
+        "%a, %d %b %Y %H:%M:%S GMT",
         "%Y-%m-%d %H:%M:%S %z",
         "%Y-%m-%d %H:%M:%S",
-        "%a, %d %b %Y %H:%M:%S GMT",
     ):
         try:
             dt = datetime.datetime.strptime(s, fmt)
@@ -55,12 +57,12 @@ def dtparse(s: Any):
             continue
     return None
 
-def normalize_record(raw: Any) -> Dict[str, Any] | None:
+def normalize_record(raw: Any) -> Optional[Dict[str, Any]]:
     if not isinstance(raw, dict):
         return None
     title = raw.get("title") or raw.get("headline") or raw.get("name") or ""
     link  = raw.get("link") or raw.get("url") or raw.get("href") or ""
-    source = raw.get("source") or raw.get("site") or raw.get("feed") or domain_from_url(link)
+    src   = raw.get("source") or raw.get("site") or raw.get("feed") or domain_from_url(link)
     dt = (
         dtparse(raw.get("published"))
         or dtparse(raw.get("pubDate"))
@@ -71,9 +73,7 @@ def normalize_record(raw: Any) -> Dict[str, Any] | None:
         or dtparse(raw.get("fetched_at"))
     )
     return {
-        "title": title,
-        "link": link,
-        "source": source,
+        "title": title, "link": link, "source": src,
         "published": raw.get("published") or raw.get("pubDate") or raw.get("isoDate") or raw.get("date"),
         "updated": raw.get("updated"),
         "fetched_at": raw.get("fetched_at"),
@@ -81,64 +81,46 @@ def normalize_record(raw: Any) -> Dict[str, Any] | None:
     }
 
 def iter_items(container: Any) -> Iterable[Dict[str, Any]]:
-    """
-    Accepts:
-      - list of dicts
-      - dict with items/articles/entries/results/data: [...]
-      - dict that itself looks like an article
-      - list of strings (skipped)
-    """
+    """Accepts list, or dict with items/articles/entries/results/data, or a single-object dict."""
     if isinstance(container, list):
         for it in container:
-            norm = normalize_record(it)
-            if norm:
-                yield norm
+            n = normalize_record(it)
+            if n: yield n
         return
     if isinstance(container, dict):
         for key in ("items", "articles", "entries", "results", "data"):
             val = container.get(key)
             if isinstance(val, list):
                 for it in val:
-                    norm = normalize_record(it)
-                    if norm:
-                        yield norm
+                    n = normalize_record(it)
+                    if n: yield n
                 return
-        # last chance: maybe the dict itself is an article
-        norm = normalize_record(container)
-        if norm:
-            yield norm
+        n = normalize_record(container)
+        if n: yield n
         return
-    # anything else: nothing
     return
 
 def human_time(dt: datetime.datetime, now: datetime.datetime):
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=datetime.timezone.utc)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=datetime.timezone.utc)
+    if dt.tzinfo is None: dt = dt.replace(tzinfo=datetime.timezone.utc)
+    if now.tzinfo is None: now = now.replace(tzinfo=datetime.timezone.utc)
     local = dt.astimezone(now.tzinfo)
     today = now.date()
-    d = local.date()
-    tstr = local.strftime("%I:%M %p").lstrip("0")
-    if d == today:
-        return f"Today, {tstr}"
-    if d == (today - datetime.timedelta(days=1)):
-        return f"Yesterday, {tstr}"
-    return local.strftime("%b %d, ") + tstr
+    t = local.strftime("%I:%M %p").lstrip("0")
+    if local.date() == today: return f"Today, {t}"
+    if local.date() == (today - datetime.timedelta(days=1)): return f"Yesterday, {t}"
+    return local.strftime("%b %d, ") + t
 
 def pick_color(seed: str):
     rnd = random.Random(seed)
     h = rnd.randint(0, 360)
-    return f"hsl({h} 70% 94%)", f"hsl({h} 70% 28%)"
+    return f"hsl({h} 70% 94%)", f"hsl({h} 70% 28%)"   # (bg, text)
 
 # ----------------- load & normalize -----------------
 raw = load_json(ITEMS_PATH, [])
-all_items: List[Dict[str, Any]] = list(iter_items(raw))  # <— ALWAYS dicts now
+all_items: List[Dict[str, Any]] = list(iter_items(raw))
 
 now_utc = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
-
-# window: last 7 days
-window_start = now_utc - datetime.timedelta(days=7)
+window_start = now_utc - datetime.timedelta(days=7)  # current = last 7 days
 
 def safe_dt(item: Dict[str, Any]) -> datetime.datetime:
     return item.get("_dt") or now_utc
@@ -148,10 +130,11 @@ current_items = [a for a in all_items if safe_dt(a) >= window_start]
 # ----------------- per-source stats -----------------
 source_stats: Dict[str, Dict[str, Any]] = {}
 for a in current_items:
-    src = (a.get("source") or "").strip()
     link = a.get("link") or ""
-    dom = domain_from_url(link)
-    key = (src or dom or "unknown").lower()
+    dom  = domain_from_url(link)
+    src  = (a.get("source") or dom or "unknown").strip()
+    key  = (src or dom or "unknown").lower()
+
     ts = safe_dt(a)
     if key not in source_stats:
         source_stats[key] = {
@@ -168,7 +151,8 @@ for a in current_items:
         source_stats[key]["last_title"] = a.get("title","")
         source_stats[key]["last_link"]  = link
 
-SOURCES_OUT.write_text(
+# write a small JSON for reuse/debug
+SOURCES_JSON.write_text(
     json.dumps(
         {
             "generated_at": now_utc.isoformat(),
@@ -191,7 +175,7 @@ SOURCES_OUT.write_text(
     encoding="utf-8"
 )
 
-# ----------------- HTML -----------------
+# ----------------- HTML fragments -----------------
 def render_sources_pills(now: datetime.datetime):
     if not source_stats:
         return "<div class='muted small'>No sources in the last 7 days.</div>"
@@ -214,60 +198,74 @@ def render_sources_pills(now: datetime.datetime):
     parts.append("</div>")
     return "\n".join(parts)
 
-def render_article_card(a: Dict[str, Any]):
-    link = a.get("link") or "#"
-    title = esc(a.get("title","(untitled)"))
-    src = esc(a.get("source") or domain_from_url(link) or "unknown")
-    when = human_time(safe_dt(a), now_utc)
-    return (
-        "<article class='card'>"
-        f"<a href='{esc(link)}' target='_blank' rel='noopener' class='card-title'>{title}</a>"
-        f"<div class='card-meta'>{src} • {when}</div>"
-        "</article>"
-    )
+pills_html = render_sources_pills(now_utc)
 
-sources_html = render_sources_pills(now_utc)
-articles_html = "\n".join(render_article_card(a) for a in current_items[:200])
+# ----------------- inject into your existing site/index.html -----------------
+# Strategy:
+#  1) Ensure <link rel="stylesheet" href="assets/pills.css"> is present (add if missing).
+#  2) Insert pills where you put <!-- SOURCES_PILLS -->.
+#  3) If no marker, try to inject right after the first <h1>…</h1>.
+#  4) If still no joy, prepend inside first <main>…</main>.
+html = INDEX_HTML.read_text(encoding="utf-8")
 
-INDEX_HTML = f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Senior News Daily</title>
-  <meta name="color-scheme" content="light dark" />
-  <link rel="stylesheet" href="assets/pills.css" />
-  <style>
-    body {{ margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }}
-    main {{ max-width: 1100px; margin: 0 auto; padding: 24px; }}
-    h1 {{ margin: 0 0 6px; font-size: 1.6rem; }}
-    .sub {{ opacity:.75; margin-bottom: 14px; }}
-    .grid {{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }}
-    @media (max-width: 900px) {{ .grid {{ grid-template-columns: repeat(2, 1fr); }} }}
-    @media (max-width: 640px) {{ .grid {{ grid-template-columns: 1fr; }} }}
-    .card {{ border: 1px solid color-mix(in oklab, canvastext 14%, transparent);
-             border-radius: 14px; padding: 10px 12px; }}
-    .card-title {{ text-decoration:none; font-weight:600; display:block; margin-bottom:6px; }}
-    .card-title:hover {{ text-decoration:underline; }}
-    .card-meta {{ font-size:.9rem; opacity:.8; }}
-    .section-title {{ margin: 18px 0 8px; font-size: 1.1rem; }}
-    .divider {{ height:1px; background:color-mix(in oklab, canvastext 14%, canvas 86%); margin:12px 0; }}
-  </style>
-</head>
-<body>
-  <main>
-    <h1>Senior News Daily</h1>
-    <div class="sub">Latest sources (past 7 days) with last-seen time and article counts.</div>
-    {sources_html}
-    <div class="divider"></div>
-    <div class="section-title">Recent Articles</div>
-    <section class="grid">
-      {articles_html}
-    </section>
-  </main>
-</body>
-</html>
-"""
-(SITE / "index.html").write_text(INDEX_HTML, encoding="utf-8")
+# 1) ensure CSS link
+if 'assets/pills.css' not in html:
+    # add before closing </head> if possible
+    if '</head>' in html:
+        html = html.replace('</head>', '  <link rel="stylesheet" href="assets/pills.css" />\n</head>', 1)
 
-print(f"[site_builder] items.json normalized -> {len(all_items)} records; window -> {len(current_items)}; sources -> {len(source_stats)}")
+# 2) preferred: explicit marker
+if '<!-- SOURCES_PILLS -->' in html:
+    html = html.replace('<!-- SOURCES_PILLS -->', pills_html, 1)
+else:
+    # 3) after first <h1>…</h1>
+    m = re.search(r'</h1\s*>', html, flags=re.IGNORECASE)
+    if m:
+        idx = m.end()
+        html = html[:idx] + "\n" + pills_html + "\n" + html[idx:]
+    else:
+        # 4) inside first <main>
+        m2 = re.search(r'<main[^>]*>', html, flags=re.IGNORECASE)
+        if m2:
+            idx = m2.end()
+            html = html[:idx] + "\n" + pills_html + "\n" + html[idx:]
+        else:
+            # last fallback: append at top of body
+            m3 = re.search(r'<body[^>]*>', html, flags=re.IGNORECASE)
+            if m3:
+                idx = m3.end()
+                html = html[:idx] + "\n" + pills_html + "\n" + html[idx:]
+            else:
+                # give up: just prefix file (rare)
+                html = pills_html + "\n" + html
+
+INDEX_HTML.write_text(html, encoding="utf-8")
+
+# ----------------- ensure pills.css exists (don’t crash if already there) -----------------
+if not PILLS_CSS.exists():
+    PILLS_CSS.write_text("""/* site/assets/pills.css */
+.pill-tray { display:flex; flex-wrap:wrap; gap:8px; padding:6px 0 10px; }
+.pill {
+  --pill-bg: color-mix(in oklab, canvas 90%, canvastext 10%);
+  --pill-fg: color-mix(in oklab, canvastext 60%, canvas 40%);
+  background: var(--pill-bg); color: var(--pill-fg);
+  border-radius:999px; padding:6px 10px; text-decoration:none;
+  display:inline-flex; align-items:baseline; gap:6px; line-height:1;
+  border:1px solid color-mix(in oklab, var(--pill-fg) 16%, transparent);
+  transition: transform .08s ease, background .2s ease, color .2s ease, border-color .2s ease;
+  white-space:nowrap;
+}
+.pill:hover {
+  transform: translateY(-1px);
+  background: color-mix(in oklab, var(--pill-bg) 80%, var(--pill-fg) 20%);
+  color: color-mix(in oklab, var(--pill-fg) 90%, canvas 10%);
+  border-color: color-mix(in oklab, var(--pill-fg) 30%, transparent);
+}
+.pill-site{ font-weight:600; letter-spacing:.2px; }
+.pill-dot{ opacity:.6; }
+.pill-when{ opacity:.9; font-variant-numeric: tabular-nums; }
+.pill-count{ opacity:.7; }
+@media (max-width:640px){ .pill{ font-size:.95rem; } }
+""", encoding="utf-8")
+
+print(f"[site_builder] normalized={len(all_items)} in_window={len(current_items)} sources={len(source_stats)}; injected pills & ensured pills.css")
