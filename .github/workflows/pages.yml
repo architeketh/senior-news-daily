@@ -88,12 +88,16 @@ jobs:
         run: |
           echo "== data/ after bots =="
           ls -la data || true
-          python - << 'PY' || true
-import json, os, pathlib
+          # Print a tiny summary if sources.json exists
+          python - <<'PY'
+import json, pathlib
 p = pathlib.Path("data/sources.json")
 if p.exists():
     j = json.loads(p.read_text(encoding="utf-8"))
-    print("sources.json -> generated_at:", j.get("generated_at"), "window_days:", j.get("window_days"), "count:", len(j.get("sources", [])))
+    print("sources.json -> generated_at:", j.get("generated_at"))
+    print("window_days:", j.get("window_days"))
+    print("count:", len(j.get("sources", [])))
+    print("first 3:", json.dumps(j.get("sources", [])[:3], ensure_ascii=False, indent=2))
 else:
     print("sources.json not found")
 PY
