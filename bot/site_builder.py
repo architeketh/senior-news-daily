@@ -12,8 +12,8 @@ DATA.mkdir(exist_ok=True)
 SITE.mkdir(exist_ok=True)
 ASSETS.mkdir(parents=True, exist_ok=True)
 
-ITEMS_PATH = DATA / "items.json"     # your current feed dump
-SOURCES_OUT = DATA / "sources.json"  # for debugging / reuse
+ITEMS_PATH = DATA / "items.json"
+SOURCES_OUT = DATA / "sources.json"
 
 # ----------------- helpers -----------------
 def esc(s: str) -> str:
@@ -32,26 +32,22 @@ def load_json(p: pathlib.Path, default):
             return json.load(f)
     return default
 
-# Flexible datetime parser for common fields
 def dtparse(s: Any):
     if not s or not isinstance(s, str):
         return None
     s = s.strip()
-    # ISO variants
     try:
         return datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
     except Exception:
         pass
-    # RSS-ish common formats
     for fmt in (
-        "%a, %d %b %Y %H:%M:%S %z",  # RFC822 with tz
+        "%a, %d %b %Y %H:%M:%S %z",
         "%Y-%m-%d %H:%M:%S %z",
-        "%Y-%m-%d %H:%M:%S",         # naive
+        "%Y-%m-%d %H:%M:%S",
         "%a, %d %b %Y %H:%M:%S GMT",
     ):
         try:
             dt = datetime.datetime.strptime(s, fmt)
-            # assume UTC for naive/GMT
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=datetime.timezone.utc)
             return dt
@@ -59,16 +55,12 @@ def dtparse(s: Any):
             continue
     return None
 
-# Normalize one raw record into a consistent dict
 def normalize_record(raw: Any) -> Dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
-    # common field aliases
     title = raw.get("title") or raw.get("headline") or raw.get("name") or ""
     link  = raw.get("link") or raw.get("url") or raw.get("href") or ""
     source = raw.get("source") or raw.get("site") or raw.get("feed") or domain_from_url(link)
-
-    # figure a datetime from several candidates
     dt = (
         dtparse(raw.get("published"))
         or dtparse(raw.get("pubDate"))
@@ -78,42 +70,48 @@ def normalize_record(raw: Any) -> Dict[str, Any] | None:
         or dtparse(raw.get("created_at"))
         or dtparse(raw.get("fetched_at"))
     )
-
-    out = {
+    return {
         "title": title,
         "link": link,
         "source": source,
         "published": raw.get("published") or raw.get("pubDate") or raw.get("isoDate") or raw.get("date"),
         "updated": raw.get("updated"),
         "fetched_at": raw.get("fetched_at"),
-        "_dt": dt,  # parsed datetime cache
+        "_dt": dt,
     }
-    return out
 
-# Expand top-level containers: dict with "items"/"articles"/"entries"/"results", or a plain list
 def iter_items(container: Any) -> Iterable[Dict[str, Any]]:
+    """
+    Accepts:
+      - list of dicts
+      - dict with items/articles/entries/results/data: [...]
+      - dict that itself looks like an article
+      - list of strings (skipped)
+    """
     if isinstance(container, list):
         for it in container:
             norm = normalize_record(it)
-            if norm: yield norm
+            if norm:
+                yield norm
         return
     if isinstance(container, dict):
         for key in ("items", "articles", "entries", "results", "data"):
-            if key in container and isinstance(container[key], list):
-                for it in container[key]:
+            val = container.get(key)
+            if isinstance(val, list):
+                for it in val:
                     norm = normalize_record(it)
-                    if norm: yield norm
+                    if norm:
+                        yield norm
                 return
-        # As a last-gasp: maybe the dict itself is an article
+        # last chance: maybe the dict itself is an article
         norm = normalize_record(container)
         if norm:
             yield norm
         return
-    # anything else => nothing
+    # anything else: nothing
     return
 
 def human_time(dt: datetime.datetime, now: datetime.datetime):
-    # normalize tz to 'now'
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     if now.tzinfo is None:
@@ -131,16 +129,15 @@ def human_time(dt: datetime.datetime, now: datetime.datetime):
 def pick_color(seed: str):
     rnd = random.Random(seed)
     h = rnd.randint(0, 360)
-    # (bg, text)
     return f"hsl({h} 70% 94%)", f"hsl({h} 70% 28%)"
 
 # ----------------- load & normalize -----------------
 raw = load_json(ITEMS_PATH, [])
-all_items: List[Dict[str, Any]] = list(iter_items(raw))
+all_items: List[Dict[str, Any]] = list(iter_items(raw))  # <— ALWAYS dicts now
 
 now_utc = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
 
-# "current articles" window — 7 days (adjust if you like)
+# window: last 7 days
 window_start = now_utc - datetime.timedelta(days=7)
 
 def safe_dt(item: Dict[str, Any]) -> datetime.datetime:
@@ -155,7 +152,6 @@ for a in current_items:
     link = a.get("link") or ""
     dom = domain_from_url(link)
     key = (src or dom or "unknown").lower()
-
     ts = safe_dt(a)
     if key not in source_stats:
         source_stats[key] = {
@@ -172,7 +168,6 @@ for a in current_items:
         source_stats[key]["last_title"] = a.get("title","")
         source_stats[key]["last_link"]  = link
 
-# write a small JSON for reference / other pages
 SOURCES_OUT.write_text(
     json.dumps(
         {
@@ -196,7 +191,7 @@ SOURCES_OUT.write_text(
     encoding="utf-8"
 )
 
-# ----------------- HTML fragments -----------------
+# ----------------- HTML -----------------
 def render_sources_pills(now: datetime.datetime):
     if not source_stats:
         return "<div class='muted small'>No sources in the last 7 days.</div>"
@@ -231,7 +226,6 @@ def render_article_card(a: Dict[str, Any]):
         "</article>"
     )
 
-# ----------------- page building -----------------
 sources_html = render_sources_pills(now_utc)
 articles_html = "\n".join(render_article_card(a) for a in current_items[:200])
 
@@ -251,7 +245,6 @@ INDEX_HTML = f"""<!doctype html>
     .grid {{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }}
     @media (max-width: 900px) {{ .grid {{ grid-template-columns: repeat(2, 1fr); }} }}
     @media (max-width: 640px) {{ .grid {{ grid-template-columns: 1fr; }} }}
-
     .card {{ border: 1px solid color-mix(in oklab, canvastext 14%, transparent);
              border-radius: 14px; padding: 10px 12px; }}
     .card-title {{ text-decoration:none; font-weight:600; display:block; margin-bottom:6px; }}
@@ -265,10 +258,7 @@ INDEX_HTML = f"""<!doctype html>
   <main>
     <h1>Senior News Daily</h1>
     <div class="sub">Latest sources (past 7 days) with last-seen time and article counts.</div>
-
-    <!-- Sources tray -->
     {sources_html}
-
     <div class="divider"></div>
     <div class="section-title">Recent Articles</div>
     <section class="grid">
@@ -278,7 +268,6 @@ INDEX_HTML = f"""<!doctype html>
 </body>
 </html>
 """
-
 (SITE / "index.html").write_text(INDEX_HTML, encoding="utf-8")
 
-print(f"Loaded {len(all_items)} items; {len(current_items)} in window; {len(source_stats)} sources.")
+print(f"[site_builder] items.json normalized -> {len(all_items)} records; window -> {len(current_items)}; sources -> {len(source_stats)}")
