@@ -303,7 +303,9 @@ document.addEventListener('click',e=>{
   }
 });
 updateStars();applyFilter(localStorage.getItem('snd_cat')||'__all');
-</script></body></html>"""
+</script>
+<script src='custom-features.js'></script>
+</body></html>"""
 
 home_html = (template
     .replace("__SUMMARY__", esc(summary))
