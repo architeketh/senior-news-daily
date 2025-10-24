@@ -307,7 +307,12 @@ class SeniorNewsCustomizer {
 
                 .snd-article-deleted {
                     opacity: 0.5;
-                    background: #f8d7da;
+                    background: #f8d7da !important;
+                    border-color: #f5c6cb !important;
+                }
+
+                .snd-article-deleted::before {
+                    background: #dc3545 !important;
                 }
 
                 .snd-stats-badge {
@@ -343,7 +348,9 @@ class SeniorNewsCustomizer {
                 .snd-article-actions {
                     display: flex;
                     gap: 8px;
-                    margin-top: 10px;
+                    margin-top: 12px;
+                    padding-top: 12px;
+                    border-top: 1px solid #e5e7eb;
                 }
 
                 @media (max-width: 768px) {
@@ -393,30 +400,39 @@ class SeniorNewsCustomizer {
     }
 
     addDeleteButtonsToArticles() {
-        const articles = document.querySelectorAll('a[href^="http"]');
+        const cards = document.querySelectorAll('.card');
         
-        articles.forEach(link => {
+        cards.forEach(card => {
+            // Skip if already has delete button
+            if (card.querySelector('.snd-article-actions')) return;
+            
+            // Get the article link
+            const link = card.querySelector('.card-title a[href^="http"]');
+            if (!link) return;
+            
             const articleUrl = link.href;
-            const parentLi = link.closest('li');
-            
-            if (!parentLi || parentLi.querySelector('.snd-article-actions')) return;
-            
             const isDeleted = this.isArticleDeleted(articleUrl);
             
             if (isDeleted) {
-                parentLi.classList.add('snd-article-deleted');
+                card.classList.add('snd-article-deleted');
             }
             
             const actionsHTML = `
                 <div class="snd-article-actions">
                     ${isDeleted ? 
-                        `<button class="snd-btn snd-btn-success" onclick="sndCustomizer.restoreArticleUI('${articleUrl}')">↶ Restore</button>` :
-                        `<button class="snd-btn snd-btn-danger" onclick="sndCustomizer.deleteArticleUI('${articleUrl}')">🗑️ Remove</button>`
+                        `<button class="snd-btn snd-btn-success" onclick="sndCustomizer.restoreArticleUI('${this.escapeForAttribute(articleUrl)}')">↶ Restore</button>` :
+                        `<button class="snd-btn snd-btn-danger" onclick="sndCustomizer.deleteArticleUI('${this.escapeForAttribute(articleUrl)}')">🗑️ Remove</button>`
                     }
                 </div>
             `;
             
-            parentLi.insertAdjacentHTML('beforeend', actionsHTML);
+            // Insert before the save button
+            const saveBtn = card.querySelector('.save');
+            if (saveBtn) {
+                saveBtn.insertAdjacentHTML('beforebegin', actionsHTML);
+            } else {
+                card.insertAdjacentHTML('beforeend', actionsHTML);
+            }
         });
     }
 
@@ -536,16 +552,28 @@ class SeniorNewsCustomizer {
         if (this.deletedArticles.length === 0) {
             listEl.innerHTML = '<div class="snd-empty-state">No deleted articles.</div>';
         } else {
-            listEl.innerHTML = this.deletedArticles.map(url => `
+            listEl.innerHTML = this.deletedArticles.map(url => {
+                // Try to get the title from the page
+                let title = url;
+                const cards = document.querySelectorAll('.card');
+                cards.forEach(card => {
+                    const link = card.querySelector('.card-title a[href="' + url + '"]');
+                    if (link) {
+                        title = link.textContent || url;
+                    }
+                });
+                
+                return `
                 <div class="snd-feed-item">
                     <div class="snd-feed-info">
+                        <div class="snd-feed-name">${this.escapeHtml(title)}</div>
                         <div class="snd-feed-url">${this.escapeHtml(url)}</div>
                     </div>
                     <div class="snd-feed-actions">
-                        <button class="snd-btn snd-btn-success" onclick="sndCustomizer.restoreArticleUI('${url}')">Restore</button>
+                        <button class="snd-btn snd-btn-success" onclick="sndCustomizer.restoreArticleUI('${this.escapeForAttribute(url)}')">Restore</button>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         }
         
         document.getElementById('snd-deleted-articles-modal').style.display = 'block';
@@ -590,40 +618,46 @@ class SeniorNewsCustomizer {
 
     deleteArticleUI(articleUrl) {
         this.deleteArticle(articleUrl);
-        const links = document.querySelectorAll(`a[href="${articleUrl}"]`);
-        links.forEach(link => {
-            const parentLi = link.closest('li');
-            if (parentLi) {
-                parentLi.style.transition = 'all 0.3s ease';
-                parentLi.style.opacity = '0.5';
-                parentLi.style.background = '#f8d7da';
-                parentLi.classList.add('snd-article-deleted');
+        
+        // Find all cards with this URL
+        const cards = document.querySelectorAll('.card');
+        cards.forEach(card => {
+            const link = card.querySelector('.card-title a[href="' + articleUrl + '"]');
+            if (link) {
+                card.style.transition = 'all 0.3s ease';
+                card.style.opacity = '0.5';
+                card.classList.add('snd-article-deleted');
                 
-                const actions = parentLi.querySelector('.snd-article-actions');
+                const actions = card.querySelector('.snd-article-actions');
                 if (actions) {
-                    actions.innerHTML = `<button class="snd-btn snd-btn-success" onclick="sndCustomizer.restoreArticleUI('${articleUrl}')">↶ Restore</button>`;
+                    actions.innerHTML = `<button class="snd-btn snd-btn-success" onclick="sndCustomizer.restoreArticleUI('${this.escapeForAttribute(articleUrl)}')">↶ Restore</button>`;
                 }
             }
         });
+        
+        this.updateStats();
     }
 
     restoreArticleUI(articleUrl) {
         this.restoreArticle(articleUrl);
-        const links = document.querySelectorAll(`a[href="${articleUrl}"]`);
-        links.forEach(link => {
-            const parentLi = link.closest('li');
-            if (parentLi) {
-                parentLi.style.opacity = '1';
-                parentLi.style.background = '';
-                parentLi.classList.remove('snd-article-deleted');
+        
+        // Find all cards with this URL
+        const cards = document.querySelectorAll('.card');
+        cards.forEach(card => {
+            const link = card.querySelector('.card-title a[href="' + articleUrl + '"]');
+            if (link) {
+                card.style.opacity = '1';
+                card.classList.remove('snd-article-deleted');
                 
-                const actions = parentLi.querySelector('.snd-article-actions');
+                const actions = card.querySelector('.snd-article-actions');
                 if (actions) {
-                    actions.innerHTML = `<button class="snd-btn snd-btn-danger" onclick="sndCustomizer.deleteArticleUI('${articleUrl}')">🗑️ Remove</button>`;
+                    actions.innerHTML = `<button class="snd-btn snd-btn-danger" onclick="sndCustomizer.deleteArticleUI('${this.escapeForAttribute(articleUrl)}')">🗑️ Remove</button>`;
                 }
             }
         });
+        
         this.closeModal('snd-deleted-articles-modal');
+        this.updateStats();
     }
 
     clearAllDeleted() {
@@ -637,13 +671,12 @@ class SeniorNewsCustomizer {
     applyArticleFilters() {
         // Hide deleted articles on page load
         this.deletedArticles.forEach(url => {
-            const links = document.querySelectorAll(`a[href="${url}"]`);
-            links.forEach(link => {
-                const parentLi = link.closest('li');
-                if (parentLi) {
-                    parentLi.classList.add('snd-article-deleted');
-                    parentLi.style.opacity = '0.5';
-                    parentLi.style.background = '#f8d7da';
+            const cards = document.querySelectorAll('.card');
+            cards.forEach(card => {
+                const link = card.querySelector('.card-title a[href="' + url + '"]');
+                if (link) {
+                    card.classList.add('snd-article-deleted');
+                    card.style.opacity = '0.5';
                 }
             });
         });
@@ -661,6 +694,10 @@ class SeniorNewsCustomizer {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    escapeForAttribute(text) {
+        return text.replace(/'/g, "\\'").replace(/"/g, '\\"');
     }
 
     // ============== EXPORT FEEDS FOR YAML ==============
